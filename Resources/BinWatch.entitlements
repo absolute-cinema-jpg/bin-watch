@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- macOS App Sandbox: the app can only touch what you explicitly hand it... -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- ...only folders you choose. The monitored folder is opened through a READ-ONLY
+         bookmark (and the app restarts after you pick it, so it never keeps write access).
+         Write access is used only for the shared request mailbox folder you choose,
+         which must be outside your Avid projects. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <!-- Remember chosen project folders between launches (still read-only). -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+</dict>
+</plist>

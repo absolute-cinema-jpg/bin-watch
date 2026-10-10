@@ -1,0 +1,74 @@
+import AppKit
+
+enum InteractionTests {
+    static func run(_ bm: BrowserModel, _ store: AppStore) {
+        let base = "Documentary S1/3 Cuts/"
+        let r = (1...4).map { base + "Reel \($0).avb" }
+        let rowY: [CGFloat] = [112, 150, 188, 232]
+        let x: CGFloat = 350
+
+        print("List view — mouse")
+        click(x, rowY[0]);            check(bm.selection == [r[0]], "click selects one bin")
+        click(x, rowY[2], .command);  check(bm.selection == [r[0], r[2]], "⌘-click adds a bin")
+        click(x, rowY[0], .command);  check(bm.selection == [r[2]], "⌘-click again removes it")
+        click(x, rowY[1]);            check(bm.selection == [r[1]], "plain click replaces the selection")
+        click(x, rowY[3], .shift);    check(bm.selection == Set(r[1...3]), "⇧-click selects a range")
+        click(700, 450);              check(bm.selection.isEmpty, "clicking empty space deselects")
+
+        print("List view — keyboard")
+        key(125);                     check(bm.selection == [r[0]], "↓ selects the first bin")
+        key(125, .shift);             check(bm.selection == Set(r[0...1]), "⇧↓ extends the selection")
+        key(125, .shift);             check(bm.selection == Set(r[0...2]), "⇧↓ again")
+        key(126, .shift);             check(bm.selection == Set(r[0...1]), "⇧↑ shrinks it back")
+        key(36);                      check(r[0...1].allSatisfy(store.isWatched), "Return watches the selection")
+        key(36);                      check(store.watched.isEmpty, "Return again stops watching")
+        key(0, .command);             check(bm.selection == Set(r), "⌘A selects all bins")
+        key(53);                      check(bm.selection.isEmpty, "Esc clears")
+        click(885, rowY[0]);          check(store.isWatched(r[0]) && bm.selection.isEmpty, "Watch button still works and doesn't select")
+        click(885, rowY[0]);          check(!store.isWatched(r[0]), "…and toggles off")
+
+        click(x, 90); pump(0.5);      check(bm.path.last == "Old", "clicking a folder opens it")
+        bm.go(to: ["Documentary S1", "3 Cuts"]); pump(0.6)
+
+        print("Icon view — mouse")
+        store.settings.browseMode = .icons; pump(0.8)
+        let tileX: [CGFloat] = [457, 595, 733, 871]
+        click(tileX[0], 104);              check(bm.selection == [r[0]], "click a tile selects it")
+        click(tileX[2], 104, .command);    check(bm.selection == [r[0], r[2]], "⌘-click adds a tile")
+        click(tileX[3], 104, .shift);      check(bm.selection == Set(r[2...3]), "⇧-click selects a range")
+        click(600, 450);                   check(bm.selection.isEmpty, "clicking empty space deselects")
+
+        print("Icon view — keyboard")
+        key(124);                     check(bm.selection == [r[0]], "→ selects the first bin")
+        key(124);                     check(bm.selection == [r[1]], "→ moves to the next")
+        key(123, .shift);             check(bm.selection == Set(r[0...1]), "⇧← extends backwards")
+        key(53)
+
+        print("Column view — keyboard")
+        store.settings.browseMode = .columns
+        bm.go(to: ["Documentary S1"]); pump(1)
+        key(124); pump(0.4);          check(bm.path == ["Documentary S1", "1 Dailies"], "→ steps into the folder (first item)")
+        key(125); pump(0.4);          check(bm.path == ["Documentary S1", "2 Selects"], "↓ moves to the next folder")
+        key(125); pump(0.4);          check(bm.path == ["Documentary S1", "3 Cuts"], "↓ again")
+        key(125); pump(0.4);          check(bm.path == ["Documentary S1"] && bm.selection == ["Documentary S1/Music.avb"], "↓ onto a bin selects it")
+        key(126); pump(0.4);          check(bm.path == ["Documentary S1", "3 Cuts"] && bm.selection.isEmpty, "↑ back onto the folder")
+        key(124); pump(0.4);          check(bm.path == ["Documentary S1", "3 Cuts", "Old"], "→ into 3 Cuts lands on its first item (Old)")
+        key(123); pump(0.4);          check(bm.path == ["Documentary S1", "3 Cuts"], "← steps back out")
+        key(124); pump(0.4); key(125); pump(0.4)
+        check(bm.path == ["Documentary S1", "3 Cuts"] && bm.selection == [r[0]], "→ then ↓ selects Reel 1 in the last column")
+        key(125, .shift); pump(0.3);  check(bm.selection == Set(r[0...1]), "⇧↓ extends in column view")
+        key(123); pump(0.3);          check(bm.selection.isEmpty && bm.path == ["Documentary S1", "3 Cuts"], "← from bins returns to their folder")
+        key(123); pump(0.3);          check(bm.path == ["Documentary S1"], "← again goes up a level")
+        key(123); pump(0.3);          check(bm.path == ["Documentary S1"], "← in the first column stays put")
+
+        print("Column view — mouse")
+        window.setContentSize(NSSize(width: 1500, height: 600))   // room for the preview column, so nothing scrolls
+        bm.go(to: ["Documentary S1", "3 Cuts"]); pump(1)
+        click(800, 96);                    check(bm.selection == [r[0]], "click a bin in the last column selects it")
+        click(800, 146, .command);         check(bm.selection == [r[0], r[2]], "⌘-click adds")
+        click(800, 171, .shift);           check(bm.selection == Set(r[2...3]), "⇧-click selects a range")
+        click(800, 450);                   check(bm.selection.isEmpty && bm.path == ["Documentary S1", "3 Cuts"], "clicking empty space in the column deselects")
+        click(580, 450); pump(0.3);        check(bm.path == ["Documentary S1"], "clicking empty space in an earlier column closes the columns after it")
+        click(580, 121); pump(0.5);        check(bm.path == ["Documentary S1", "3 Cuts"], "clicking a folder in a column opens it")
+    }
+}
