@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         _ = AppStore.shared
         _ = RequestCenter.shared
+        _ = NewBinWatcher.shared
         ManageWindow.show()
         if CommandLine.arguments.contains("--test-alert") {
             AppStore.shared.showTestAlert(count: 3)

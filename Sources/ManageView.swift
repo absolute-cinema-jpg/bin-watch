@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SidebarItem: Hashable {
-    case watching, browse, settings
+    case watching, browse, newBins, settings
 }
 
 final class Navigation: ObservableObject {
@@ -16,8 +16,8 @@ final class Navigation: ObservableObject {
     }
 
     /// Jump the browser to a folder (e.g. "show me where this watched bin lives").
-    func reveal(folder: String) {
-        BrowserModel.shared.go(toRelative: folder)
+    func reveal(folder: String, select bin: String? = nil) {
+        BrowserModel.shared.go(toRelative: folder, select: bin)
         selection = .browse
     }
 }
@@ -25,6 +25,7 @@ final class Navigation: ObservableObject {
 struct ManageView: View {
     @EnvironmentObject var store: AppStore
     @ObservedObject private var nav = Navigation.shared
+    @ObservedObject private var newBins = NewBinWatcher.shared
 
     var body: some View {
         HStack(spacing: 0) {
@@ -32,7 +33,7 @@ struct ManageView: View {
             Divider()
             detail.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 880, minHeight: 540)
+        .frame(minWidth: 960, minHeight: 540)
         .sheet(item: $nav.askTarget) { target in
             AskSheet(target: target).environmentObject(store)
         }
@@ -55,7 +56,18 @@ struct ManageView: View {
                 .tag(SidebarItem.watching)
 
                 Label {
-                    Text("Browse Bins")
+                    HStack {
+                        Text("New Bins")
+                        Spacer()
+                        if !newBins.watches.isEmpty { CountBadge(count: newBins.watches.count) }
+                    }
+                } icon: {
+                    Image(systemName: "sparkles").foregroundStyle(Color(red: 0.22, green: 0.72, blue: 0.92))
+                }
+                .tag(SidebarItem.newBins)
+
+                Label {
+                    Text("Browse")
                 } icon: {
                     Image(systemName: "folder").foregroundStyle(.blue)
                 }
@@ -77,6 +89,7 @@ struct ManageView: View {
         switch nav.selection {
         case .watching: WatchingView()
         case .settings: SettingsView()
+        case .newBins:  NewBinsView()
         default:        BrowseView()
         }
     }
@@ -131,9 +144,9 @@ struct WatchingView: View {
             if store.watched.isEmpty {
                 EmptyState(
                     symbol: "bell.slash",
-                    title: "You're not watching any bins",
-                    message: "Browse to any bin you're waiting for and click Watch. You'll be alerted the moment it's unlocked.",
-                    actionTitle: "Browse Bins",
+                    title: "You're not watching any bins or scripts",
+                    message: "Browse to any bin or script you're waiting for and click Watch. You'll be alerted the moment it's unlocked.",
+                    actionTitle: "Browse",
                     action: { Navigation.shared.selection = .browse })
             } else {
                 List {
@@ -161,7 +174,8 @@ struct WatchingView: View {
     private func confirmClearAll() {
         let count = store.watched.count
         let alert = NSAlert()
-        alert.messageText = "Stop watching all \(count) bin\(count == 1 ? "" : "s")?"
+        alert.messageText = count == 1 ? "Stop watching \(AvidItem.count(store.watched.map(\.relativePath)))?"
+                                       : "Stop watching all \(AvidItem.count(store.watched.map(\.relativePath)))?"
         alert.informativeText = "You won't be alerted when they're unlocked. Nothing in your project is changed."
         alert.addButton(withTitle: "Stop Watching All")
         alert.addButton(withTitle: "Cancel")
@@ -184,9 +198,12 @@ struct WatchingView: View {
 
     private var subtitle: String {
         let n = store.watched.count
-        guard n > 0 else { return "You'll get an alert the moment a watched bin is unlocked." }
+        guard n > 0 else { return "You'll get an alert the moment a watched bin or script is unlocked." }
         let locked = store.lockedCount
-        return "\(n) bin\(n == 1 ? "" : "s") · \(locked) still locked"
+        let scripts = store.watched.filter(\.isScript).count, bins = n - scripts
+        let what = [bins > 0 ? "\(bins) bin\(bins == 1 ? "" : "s")" : nil,
+                    scripts > 0 ? "\(scripts) script\(scripts == 1 ? "" : "s")" : nil].compactMap { $0 }.joined(separator: ", ")
+        return "\(what) · \(locked) still locked"
     }
 }
 
@@ -199,7 +216,7 @@ struct WatchedRow: View {
     var body: some View {
         let state = store.states[bin.id] ?? .checking
         HStack(spacing: 12) {
-            BinIcon(state: state)
+            BinIcon(state: state, isScript: bin.isScript)
             Text(bin.name).font(.body.weight(.medium))
             Spacer()
             if let request = requests.openRequest(for: bin.relativePath) {
@@ -214,7 +231,7 @@ struct WatchedRow: View {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
             }
             .buttonStyle(.plain)
-            .help("Stop watching this bin")
+            .help("Stop watching this \(AvidItem.noun(bin.relativePath))")
         }
         .padding(.vertical, 5)
     }

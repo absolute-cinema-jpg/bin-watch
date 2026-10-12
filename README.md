@@ -1,6 +1,6 @@
 # Bin Watch
 
-A small menu-bar app that tells you when an Avid bin someone else has open becomes free. It checks for the bin's `.lck` file, and when that file is gone you get an alert.
+A small menu-bar app that tells you when an Avid bin or script someone else has open becomes free. It checks for the `.lck` file Avid keeps beside an open bin (`.avb`) or script (`.avc`), and when that file is gone you get an alert. Everything below that says "bin" works the same way for scripts.
 
 ## Build & install
 
@@ -16,7 +16,7 @@ The build only needs Apple's Command Line Tools. Xcode isn't required.
 
 1. Open Bin Watch from the Dock or Applications. Like Spotify, closing the window doesn't quit the app; it keeps monitoring. Click the Dock icon to bring the window back, and quit with ⌘Q.
 2. **Monitored folder:** choose one folder. It can be a single Avid project or a whole "Avid Projects" folder. To change it later, use **Change…** in the bottom of the sidebar or in Settings. Watched bins that are still inside the new folder stay watched.
-3. **Browse Bins:** works like Finder.
+3. **Browse:** works like Finder. The sidebar order is Watching, New Bins, Browse, Settings.
    - **Views:** switch between Icons, List and Columns (⌘1 / ⌘2 / ⌘3). In Columns view, clicking a bin shows a preview with a big Watch button.
    - **Moving around:** click a folder to open it. Use the back and forward buttons (⌘[ and ⌘]) or ⌘↑ to go up a level, and click any part of the path bar to jump there.
    - **Type or paste a path:** click the empty part of the path bar, or press ⌘L or ⌘⇧G. Finder paths, paths from Terminal, `file://` links and Windows-style paths all work. A path that points at a bin selects that bin.
@@ -28,19 +28,33 @@ The build only needs Apple's Command Line Tools. Xcode isn't required.
 When a watched bin goes from locked to free:
 
 - A compact alert slides in at the top right and plays your chosen sound.
-- Click **Got it** to dismiss the alert and stop watching that bin. This is the default; you can change it in Settings.
+- **Show Bin** opens the bin in Media Composer if Avid is already running, or shows it in Finder if it isn't. Bin Watch never launches Avid itself.
+- **Dismiss** just closes the alert.
+- Either way, Bin Watch stops watching that bin. You can change this in Settings.
 - Several alerts stack neatly, with the newest on top. Click the stack or **Show all** to expand it into a list (it never grows past 60% of the screen), and **Clear all** dismisses them all.
 - Alerts appear above everything, on every Space and in full-screen apps. They respond to the first click and never take keyboard focus from Media Composer.
 - The Dock icon bounces once and shows a badge with the number of alerts waiting. The chime can repeat every minute until you respond.
 
 **Custom sounds:** go to Settings, then **Add Sound**. Any audio file works. Bin Watch keeps its own copy, in its private sandbox folder, so your original file isn't touched. You can also set the volume there.
 
+## New bins
+
+Get an alert when bins appear in a folder, for example new scene bins landing in your project.
+
+- **Turning it on:** in **Browse**, open the folder and click **New Bin Alerts** next to the path bar. The button turns solid blue when alerts are on. You can also right-click a folder and choose **Alert Me About New Bins**. New scripts count too.
+- **Marked folders:** folders with alerts on show a blue ✦ badge in every view, plus a "New bin alerts" tag in List view. Folders covered because a parent folder includes subfolders show a fainter badge. A bin covered by two watched folders is only announced once.
+- **The New Bins tab:** lists those folders and the bins that have recently appeared. Turn on **Include subfolders** to cover a whole tree; folders are checked every 5 seconds, or every 30 seconds with subfolders on.
+- **The alert:** has **Show Bin** (or **Show Bins** for several) and **Dismiss**. Several bins that arrive together are grouped into one alert.
+- **What doesn't count as new:** bins that were already there, bins moved between subfolders, and bins that vanish briefly while being saved. A workspace going offline never makes everything look new.
+- **While Bin Watch was closed:** bins added meanwhile are reported the next time it starts.
+- **Renames:** renaming a bin in Avid renames its file, so it shows up as a new bin. So do bins you create yourself.
+
 ## Asking for a bin
 
 When a bin you need is locked, you can ask whoever has it open to close it. This works without Wi-Fi or any network setup: Bin Watch passes messages as small files in a shared **mailbox folder** on the same storage as your projects. It works over NEXIS, file servers and synced storage like Salon SyncBox, where it also reaches other sites.
 
 1. **Set up (once per person):** open Settings, then **Bin Requests**, then **Choose…**, and pick the same folder as everyone else. Create a new empty folder for this, outside your Avid projects; Bin Watch refuses folders inside a project. Check **Your name**.
-2. **Ask:** click **Ask…** next to any locked bin. It appears in Browse Bins, on the Watching page, in the right-click menu, and in Columns view's preview. Choose a person, or **Everyone using Bin Watch** if you're not sure who has it, and add an optional note. Asking also watches the bin.
+2. **Ask:** click **Ask…** next to any locked bin. It appears in Browse, on the Watching page, in the right-click menu, and in Columns view's preview. Choose a person, or **Everyone using Bin Watch** if you're not sure who has it, and add an optional note. Asking also watches the bin.
 3. **Their side:** they get a purple request alert with **I'll close it** and **Not now** (or **Not me**, when you asked everyone). You see their answer as an alert, and on the Watching page ("Seen by Sam", "Sam is closing it").
 4. **When the bin frees up:** you get the usual alert, and the request disappears from everyone's screen by itself.
 
@@ -62,6 +76,12 @@ codesign -d --entitlements - "/Applications/Bin Watch.app"
 ```
 
 ## Notes
+
+- **Finder and `.DS_Store` files.** When **Show Bin** reveals a bin in Finder, *Finder* (not Bin Watch) may leave a hidden `.DS_Store` file in that folder on network storage. Many Avid facilities turn this off for every Mac. To do that, run this command and then log out and back in:
+
+  ```bash
+  defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true
+  ```
 
 - After a rebuild, the monitored folder may show an orange dot (meaning it can't be reached). If it does, click **Change…** and pick the same folder again. Its saved permission is tied to the app's signature.
 - **Open Bin Watch when I log in** works best when the app is in /Applications.

@@ -254,7 +254,7 @@ final class RequestCenter: ObservableObject {
         AlertCenter.shared.present(
             AlertItem(id: cardID, kind: .request(everyone: request.isForEveryone),
                       title: "\(request.from.name) would like “\(request.binName)”",
-                      detail: detail, time: request.created),
+                      detail: detail, time: request.created, noun: AvidItem.noun(request.binPath)),
             onRespond: { [weak self] response in self?.answer(request, response) })
         reply(to: request, .seen)
     }

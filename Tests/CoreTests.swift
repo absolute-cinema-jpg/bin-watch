@@ -35,6 +35,23 @@ func check(_ cond: Bool, _ msg: String) {
         check(parent.folders.first { $0.name == "Fake Project" }?.isProject == true, "folder with an .avp is recognised as a project")
         check(ReadOnlyFS.listFolder(root.appendingPathComponent("nope"), relative: "", detectProjects: false) == nil, "unreachable folder → nil")
 
+        print("Scripts (.avc)")
+        fm.createFile(atPath: root.appendingPathComponent("Reels/Opening.avc").path, contents: Data())
+        fm.createFile(atPath: root.appendingPathComponent("Reels/Closing.avc").path, contents: Data())
+        fm.createFile(atPath: root.appendingPathComponent("Reels/Opening.lck").path, contents: Data())
+        let withScripts = ReadOnlyFS.listFolder(root.appendingPathComponent("Reels"), relative: "Reels", detectProjects: false)!
+        check(withScripts.bins.map(\.name) == ["Closing", "Opening", "Reel 1", "Reel 2"], "scripts are listed alongside bins: \(withScripts.bins.map(\.name))")
+        check(withScripts.bins.first { $0.name == "Opening" }.map { $0.isScript && $0.isLocked } == true, "an open script (with a .lck) shows as locked")
+        check(withScripts.bins.first { $0.name == "Closing" }.map { $0.isScript && !$0.isLocked } == true, "a closed script is free")
+        let scriptJob = ProbeJob(id: UUID(), directory: root.appendingPathComponent("Reels"), binFileName: "Opening.avc")
+        check(ReadOnlyFS.probe([scriptJob])[scriptJob.id] == .locked, "watching a script checks its lock file")
+        check((try? PathInput.resolve("/Volumes/Project/Doc/Opening.avc", rootPath: "/Volumes/Project").get())?.bin == "Doc/Opening.avc",
+              "a pasted script path selects the script")
+        check(AvidItem.count(["a.avb", "b.avb", "c.avc"]) == "2 bins and 1 script", "mixed counts read naturally")
+        check(AvidItem.count(["c.avc"]) == "1 script" && AvidItem.noun("x/y.avc") == "script" && AvidItem.noun("x/y.avb") == "bin",
+              "single items are named correctly")
+        for f in ["Opening.avc", "Closing.avc", "Opening.lck"] { try? fm.removeItem(at: root.appendingPathComponent("Reels/" + f)) }
+
         print("Search index")
         let index = ReadOnlyFS.index(root.appendingPathComponent("Reels"), prefix: "Reels")!
         check(Set(index.bins.map(\.relativePath)) == ["Reels/Reel 1.avb", "Reels/Reel 2.avb", "Reels/Old/Café.avb"],
@@ -97,6 +114,29 @@ func check(_ cond: Bool, _ msg: String) {
         check((try? PathInput.resolve("/Volumes/Imports/Foo", rootPath: rootPath).get()) == nil, "outside the monitored folder → refused")
         check((try? PathInput.resolve("/Volumes", rootPath: rootPath).get()) == nil, "parent of the monitored folder → refused")
         check((try? PathInput.resolve("   ", rootPath: rootPath).get()) == nil, "empty → nothing")
+
+        print("New bins — detection")
+        let t0 = Date()
+        var look = NewBinDiff.compare(known: nil, current: ["P/101 SC01.avb", "P/101 SC02.avb"], now: t0)
+        check(look.added.isEmpty, "first look: existing bins aren't “new”")
+        look = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb", "P/101 SC02.avb", "P/101 SC03.avb"], now: t0 + 5)
+        check(look.added == ["P/101 SC03.avb"], "a bin that appears is new")
+        look = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb", "P/101 SC02.avb", "P/101 SC03.avb"], now: t0 + 10)
+        check(look.added.isEmpty, "…and only reported once")
+        look = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb", "P/101 SC03.avb"], now: t0 + 15)
+        look = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb", "P/101 SC02.avb", "P/101 SC03.avb"], now: t0 + 20)
+        check(look.added.isEmpty, "a bin that briefly vanishes (e.g. while saving) isn't new when it returns")
+        look = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb", "P/Old/101 SC02.avb", "P/101 SC03.avb"], now: t0 + 25)
+        check(look.added.isEmpty, "a bin moved to a subfolder isn't new")
+        look = NewBinDiff.compare(known: look.known, current: ["p/101 sc01.AVB", "P/Old/101 SC02.avb", "P/101 SC03.avb"], now: t0 + 30)
+        check(look.added.isEmpty, "a change of letter case isn't new")
+        look = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb", "P/Old/101 SC02.avb", "P/101 SC03.avb", "P/102 SC01.avb", "P/102 SC02.avb"], now: t0 + 35)
+        check(look.added == ["P/102 SC01.avb", "P/102 SC02.avb"], "several new bins at once are all reported")
+        let gone = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb"], now: t0 + 40)
+        let back = NewBinDiff.compare(known: gone.known, current: ["P/101 SC01.avb", "P/102 SC01.avb"], now: t0 + 40 + 7200)
+        check(back.added == ["P/102 SC01.avb"], "a bin gone for over an hour counts as new when it comes back")
+        let overnight = NewBinDiff.compare(known: look.known, current: ["P/101 SC01.avb", "P/Old/101 SC02.avb", "P/101 SC03.avb", "P/102 SC01.avb", "P/102 SC02.avb", "P/103 SC01.avb"], now: t0 + 14 * 3600)
+        check(overnight.added == ["P/103 SC01.avb"], "after Bin Watch was closed overnight, only bins added meanwhile are new")
 
         print("Mailbox — folder safety")
         let shared = URL(fileURLWithPath: CommandLine.arguments[1]).appendingPathComponent("Workspace")

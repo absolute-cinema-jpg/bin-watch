@@ -86,7 +86,9 @@ func snapshot(_ out: String) {
             exit(0)
         }
         InteractionTests.run(bm, store)
+        BinOpener.testHook = { _ in }       // never open Avid or Finder from tests
         RequestFlowTests.run(store, dir: dir)
+        NewBinsFlowTests.run(store, dir: dir)
         print(fails == 0 ? "interaction tests passed" : "\(fails) interaction tests FAILED")
         exit(fails == 0 ? 0 : 1)
     }

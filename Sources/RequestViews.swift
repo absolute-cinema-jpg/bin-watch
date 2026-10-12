@@ -40,7 +40,7 @@ struct AskSheet: View {
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Bin Watch will ask them to close the bin, and alert you the moment it's free.")
+            Text("Bin Watch will ask them to close the \(AvidItem.noun(target.relativePath)), and alert you the moment it's free.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -82,7 +82,7 @@ struct AskSheet: View {
 
     private var setUp: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("To ask colleagues for bins, everyone using Bin Watch chooses the same shared folder on your storage (outside your Avid projects). Bin Watch leaves small message files there — no Wi-Fi or network setup needed.")
+            Text("To ask colleagues for bins and scripts, everyone using Bin Watch chooses the same shared folder on your storage (outside your Avid projects). Bin Watch leaves small message files there — no Wi-Fi or network setup needed.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
@@ -169,7 +169,7 @@ struct AskButton: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .tint(requestPurple)
-        .help("Ask whoever has this bin open to close it")
+        .help("Ask whoever has this \(AvidItem.noun(relativePath)) open to close it")
     }
 }
 
@@ -181,7 +181,7 @@ struct BinRequestsSettings: View {
 
     var body: some View {
         Section("Bin Requests") {
-            Text("Ask a colleague to close a bin you need. Everyone using Bin Watch chooses the same shared folder on your storage (outside your Avid projects); requests travel as small files there, so no Wi-Fi or network setup is needed — it works over NEXIS and synced storage like SyncBox.")
+            Text("Ask a colleague to close a bin or script you need. Everyone using Bin Watch chooses the same shared folder on your storage (outside your Avid projects); requests travel as small files there, so no Wi-Fi or network setup is needed — it works over NEXIS and synced storage like SyncBox.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

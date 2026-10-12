@@ -97,7 +97,7 @@ final class MailboxClient {
             case .insideAvidProject(let project):
                 return "That folder is inside the Avid project “\(project)”. Bin Watch never writes inside a project — choose a folder outside it."
             case .containsProjectFiles:
-                return "That folder contains Avid project files or bins. Choose an empty folder, or create a new one."
+                return "That folder contains Avid project files, bins or scripts. Choose an empty folder, or create a new one."
             case .unreadable:
                 return "Bin Watch couldn't read that folder."
             }
@@ -121,7 +121,7 @@ final class MailboxClient {
             }
         }
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: path) else { return .unreadable }
-        if names.contains(where: { ["avp", "avb", "avs"].contains(($0 as NSString).pathExtension.lowercased()) }) {
+        if names.contains(where: { ["avp", "avb", "avc", "avs"].contains(($0 as NSString).pathExtension.lowercased()) }) {
             return .containsProjectFiles
         }
         return nil

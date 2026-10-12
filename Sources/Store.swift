@@ -83,7 +83,7 @@ final class AppStore: ObservableObject {
         }
         if !dropped.isEmpty {
             let alert = NSAlert()
-            alert.messageText = "Stop watching \(dropped.count) bin\(dropped.count == 1 ? "" : "s")?"
+            alert.messageText = "Stop watching \(AvidItem.count(dropped.map(\.relativePath)))?"
             alert.informativeText = "\(dropped.map(\.name).prefix(5).joined(separator: ", "))\(dropped.count > 5 ? "…" : "") "
                 + "\(dropped.count == 1 ? "isn't" : "aren't") inside “\(url.lastPathComponent)”, so Bin Watch can't keep watching \(dropped.count == 1 ? "it" : "them")."
             alert.addButton(withTitle: "Change Folder")
@@ -92,6 +92,13 @@ final class AppStore: ObservableObject {
         }
 
         for bin in dropped { unwatch(bin) }
+        // Keep "new bin" folders that are still inside the new monitored folder.
+        let oldRoot = (root?.path ?? rootPath) ?? ""
+        NewBinWatcher.shared.rootChanged { folder in
+            let absolute = folder.isEmpty ? oldRoot : (oldBase ?? "") + folder
+            if ReadOnlyFS.key(absolute) == ReadOnlyFS.key(url.path) { return "" }
+            return absolute.hasPrefix(newBase) ? String(absolute.dropFirst(newBase.count)) : nil
+        }
         root?.stopAccessingSecurityScopedResource()
         root = nil
         rootBookmark = bookmark
@@ -240,15 +247,18 @@ final class AppStore: ObservableObject {
     private func binBecameAvailable(_ bin: WatchedBin) {
         RequestCenter.shared.binBecameAvailable(bin.relativePath)
         pendingAlerts.insert(bin.id)
+        let url = root?.appendingPathComponent(bin.relativePath)
         AlertCenter.shared.present(
-            binID: bin.id,
-            binName: bin.name,
-            detail: displayPath(bin.folder, root: rootName),
-            onAcknowledge: { [weak self] in self?.acknowledge(bin.id) })
+            AlertItem(binID: bin.id, binName: bin.name, detail: displayPath(bin.folder, root: rootName),
+                      noun: AvidItem.noun(bin.relativePath)),
+            onRespond: { [weak self] response in
+                if response == .primary, let url { BinOpener.show([url]) }   // "Show Bin"
+                self?.acknowledge(bin.id)                                     // either way, it's been seen
+            })
         NSApp.requestUserAttention(.informationalRequest)   // one gentle Dock bounce
     }
 
-    /// "Got it": the alert goes away and, by default, the bin stops being watched.
+    /// "Show Bin" or "Dismiss": the alert goes away and, by default, the bin stops being watched.
     private func acknowledge(_ id: UUID) {
         pendingAlerts.remove(id)
         if settings.stopWatchingAfterAlert, let bin = watched.first(where: { $0.id == id }) { unwatch(bin) }

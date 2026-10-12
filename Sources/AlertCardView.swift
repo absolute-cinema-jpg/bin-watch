@@ -14,8 +14,11 @@ struct AlertStackView: View {
     static let peek: CGFloat = 7
 
     static func height(of item: AlertItem) -> CGFloat {
-        if case .request = item.kind { return 96 }
-        return 64
+        switch item.kind {
+        case .request: return 96
+        case .available, .newBins: return 88
+        case .reply: return 64
+        }
     }
 
     @ObservedObject var model: AlertStackModel
@@ -68,7 +71,7 @@ struct AlertStackView: View {
     private var headerTitle: String {
         let bins = model.items.filter { $0.kind == .available }.count
         let others = model.items.count - bins
-        if others == 0 { return "\(bins) bins available" }
+        if others == 0 { return "\(bins) available" }
         if bins == 0 { return "\(others) messages" }
         return "\(model.items.count) alerts"
     }
@@ -123,9 +126,12 @@ struct AlertCard: View {
     private var style: (label: String, symbol: String, colors: [Color]) {
         switch item.kind {
         case .available:
-            return ("BIN AVAILABLE", "lock.open.fill", [green, teal])
+            return ("\(item.noun.uppercased()) AVAILABLE", "lock.open.fill", [green, teal])
         case .request:
-            return ("BIN REQUEST", "hand.raised.fill", [Color(red: 0.55, green: 0.42, blue: 0.98), Color(red: 0.36, green: 0.30, blue: 0.85)])
+            return ("\(item.noun.uppercased()) REQUEST", "hand.raised.fill", [Color(red: 0.55, green: 0.42, blue: 0.98), Color(red: 0.36, green: 0.30, blue: 0.85)])
+        case .newBins(let count):
+            return (count == 1 ? "NEW \(item.noun.uppercased())" : "NEW \(item.noun.uppercased())S", "sparkles",
+                    [Color(red: 0.22, green: 0.72, blue: 0.92), Color(red: 0.12, green: 0.45, blue: 0.82)])
         case .reply(let positive):
             return ("REPLY", positive ? "checkmark.bubble.fill" : "text.bubble.fill",
                     positive ? [Color(red: 0.25, green: 0.6, blue: 1), Color(red: 0.15, green: 0.42, blue: 0.9)]
@@ -135,23 +141,21 @@ struct AlertCard: View {
 
     var body: some View {
         Group {
-            if case .request(let everyone) = item.kind {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 11) { badge; texts(lines: 2) }
-                    HStack(spacing: 8) {
-                        Spacer().frame(width: 34)
-                        Button("I'll close it") { AlertCenter.shared.respond(item.id, .primary) }
-                            .buttonStyle(CardButtonStyle(fill: style.colors[0], foreground: .white))
-                        Button(everyone ? "Not me" : "Not now") { AlertCenter.shared.respond(item.id, .secondary) }
-                            .buttonStyle(CardButtonStyle(fill: Color.primary.opacity(0.12), foreground: .primary))
-                    }
-                }
-            } else {
+            switch item.kind {
+            case .request(let everyone):
+                twoRow(lines: 2,
+                       primary: ("I'll close it", .primary),
+                       secondary: (everyone ? "Not me" : "Not now", .secondary))
+            case .available:
+                twoRow(lines: 1, primary: ("Show \(item.noun.capitalized)", .primary), secondary: ("Dismiss", .secondary))
+            case .newBins(let count):
+                twoRow(lines: 1, primary: ("Show \(item.noun.capitalized)\(count == 1 ? "" : "s")", .primary), secondary: ("Dismiss", .secondary))
+            case .reply:
                 HStack(spacing: 11) {
                     badge
                     texts(lines: 1)
                     Spacer(minLength: 4)
-                    Button(item.kind == .available ? "Got it" : "OK") { AlertCenter.shared.acknowledge(item.id) }
+                    Button("OK") { AlertCenter.shared.acknowledge(item.id) }
                         .buttonStyle(CardButtonStyle(fill: style.colors[0], foreground: .white))
                 }
             }
@@ -177,6 +181,23 @@ struct AlertCard: View {
         }
     }
 
+    /// Badge and text on top, two buttons underneath.
+    private func twoRow(lines: Int, primary: (String, AlertResponse), secondary: (String, AlertResponse)) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 11) { badge; texts(lines: lines); Spacer(minLength: 0) }
+            HStack(spacing: 8) {
+                Spacer().frame(width: 34)
+                Button(primary.0) { AlertCenter.shared.respond(item.id, primary.1) }
+                    .buttonStyle(CardButtonStyle(fill: style.colors[0], foreground: .white))
+                    .help(item.kind == .available || isNewBins ? BinOpener.showLabel : "")
+                Button(secondary.0) { AlertCenter.shared.respond(item.id, secondary.1) }
+                    .buttonStyle(CardButtonStyle(fill: Color.primary.opacity(0.12), foreground: .primary))
+            }
+        }
+    }
+
+    private var isNewBins: Bool { if case .newBins = item.kind { return true } else { return false } }
+
     private func texts(lines: Int) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 6) {
@@ -197,7 +218,7 @@ struct AlertCard: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .truncationMode(isNewBins ? .tail : .middle)
             }
         }
     }

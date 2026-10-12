@@ -6,6 +6,7 @@ struct AlertItem: Identifiable, Equatable {
         case available                     // a watched bin is free
         case request(everyone: Bool)       // someone asks me to close a bin
         case reply(positive: Bool)         // someone answered my request
+        case newBins(count: Int)           // bins appeared in a folder I'm watching
     }
 
     let id: UUID
@@ -13,14 +14,16 @@ struct AlertItem: Identifiable, Equatable {
     let title: String
     let detail: String
     let time: Date
+    /// What it's about, for labels: "bin", "script", or "item" for a mix.
+    var noun = "bin"
 
     /// Bin-available alert.
-    init(binID: UUID, binName: String, detail: String, time: Date = Date()) {
-        self.init(id: binID, kind: .available, title: binName, detail: detail, time: time)
+    init(binID: UUID, binName: String, detail: String, time: Date = Date(), noun: String = "bin") {
+        self.init(id: binID, kind: .available, title: binName, detail: detail, time: time, noun: noun)
     }
 
-    init(id: UUID, kind: Kind, title: String, detail: String, time: Date) {
-        self.id = id; self.kind = kind; self.title = title; self.detail = detail; self.time = time
+    init(id: UUID, kind: Kind, title: String, detail: String, time: Date, noun: String = "bin") {
+        self.id = id; self.kind = kind; self.title = title; self.detail = detail; self.time = time; self.noun = noun
     }
 }
 
@@ -73,14 +76,12 @@ final class AlertCenter {
         handler?(response)
     }
 
-    /// "Got it" / "OK" on a card.
+    /// "OK" on a reply card.
     func acknowledge(_ id: UUID) { respond(id, .primary) }
 
-    /// "Clear all": bins and replies are acknowledged; requests are just put away (no answer sent).
+    /// "Clear all": everything is dismissed — nothing is opened and no answers are sent.
     func acknowledgeAll() {
-        for item in model.items {
-            if case .request = item.kind { respond(item.id, .dismissed) } else { respond(item.id, .primary) }
-        }
+        for item in model.items { respond(item.id, .dismissed) }
     }
 
     /// Takes an alert away without treating it as acknowledged (e.g. the bin was unwatched).

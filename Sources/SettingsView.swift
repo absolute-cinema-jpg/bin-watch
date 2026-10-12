@@ -93,7 +93,7 @@ struct SettingsView: View {
 
                 Section("Alerts") {
                     Toggle("Chime again every minute until I dismiss the alert", isOn: $store.settings.repeatChime)
-                    Toggle("Stop watching a bin when I click “Got it”", isOn: $store.settings.stopWatchingAfterAlert)
+                    Toggle("Stop watching a bin or script once I've clicked Show or Dismiss on its alert", isOn: $store.settings.stopWatchingAfterAlert)
                     HStack {
                         Spacer()
                         Button("Show Test Alert") { store.showTestAlert() }

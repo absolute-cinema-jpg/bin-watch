@@ -8,6 +8,7 @@ struct WatchedBin: Codable, Identifiable, Hashable {
     var fileName: String { (relativePath as NSString).lastPathComponent }
     var name: String { (fileName as NSString).deletingPathExtension }
     var folder: String { (relativePath as NSString).deletingLastPathComponent }
+    var isScript: Bool { AvidItem.isScript(relativePath) }
 }
 
 /// Turns "Doc S1/Reels" into "Doc S1 › Reels".

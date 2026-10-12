@@ -73,10 +73,21 @@ struct CountBadge: View {
     }
 }
 
+/// Icon for a bin or script: a padlock (or locked document, for scripts) while it's locked.
+func itemSymbol(locked: Bool, script: Bool) -> String {
+    switch (locked, script) {
+    case (true, false):  return "lock.fill"
+    case (true, true):   return "lock.doc.fill"
+    case (false, true):  return "doc.text.fill"
+    case (false, false): return "rectangle.stack.fill"
+    }
+}
+
 struct BinIcon: View {
     let state: BinState
+    var isScript = false
     var body: some View {
-        Image(systemName: state == .locked ? "lock.fill" : "rectangle.stack.fill")
+        Image(systemName: itemSymbol(locked: state == .locked, script: isScript))
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(state == .locked ? Color.orange : state == .available ? Color.green : Color.secondary)
             .frame(width: 28, height: 28)

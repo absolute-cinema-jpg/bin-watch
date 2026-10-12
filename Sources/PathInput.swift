@@ -36,10 +36,10 @@ enum PathInput {
             parts.removeFirst()      // "Avid Projects/Doc S1" when the root is ".../Avid Projects"
         }
 
-        if let last = parts.last, ["avb", "avp", "lck", "avs"].contains((last as NSString).pathExtension.lowercased()) {
+        if let last = parts.last, ["avb", "avc", "avp", "lck", "avs"].contains((last as NSString).pathExtension.lowercased()) {
             let file = parts.removeLast()
             let folder = parts.joined(separator: "/")
-            let isBin = (file as NSString).pathExtension.lowercased() == "avb"
+            let isBin = AvidItem.isItem(file)      // a bin or a script
             return .success(Target(folder: folder, bin: isBin ? (folder.isEmpty ? file : folder + "/" + file) : nil))
         }
         return .success(Target(folder: parts.joined(separator: "/"), bin: nil))

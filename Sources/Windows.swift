@@ -50,8 +50,8 @@ struct MenuBarView: View {
             if store.watched.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "bell.slash").font(.title2).foregroundStyle(.tertiary)
-                    Text("Not watching any bins").font(.callout.weight(.medium))
-                    Text("Choose bins to watch and you'll be alerted when they unlock.")
+                    Text("Not watching anything").font(.callout.weight(.medium))
+                    Text("Choose bins or scripts to watch and you'll be alerted when they unlock.")
                         .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
@@ -89,7 +89,7 @@ private struct MenuBinRow: View {
     var body: some View {
         let state = store.states[bin.id] ?? .checking
         HStack(spacing: 10) {
-            BinIcon(state: state)
+            BinIcon(state: state, isScript: bin.isScript)
             VStack(alignment: .leading, spacing: 1) {
                 Text(bin.name).font(.callout.weight(.medium)).lineLimit(1)
                 Text(displayPath(bin.folder, root: store.rootName))

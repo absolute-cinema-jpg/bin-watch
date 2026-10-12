@@ -23,13 +23,40 @@ enum BinState: String, Equatable {
     case checking, locked, available, missing, offline
 }
 
-/// A bin found while browsing a project.
+/// Bins (.avb) and scripts (.avc) behave the same in Avid: both are files in the project,
+/// and both get a "<name>.lck" lock file beside them while someone has them open.
+enum AvidItem {
+    static let extensions: Set<String> = ["avb", "avc"]
+
+    static func isItem(_ fileName: String) -> Bool {
+        extensions.contains((fileName as NSString).pathExtension.lowercased())
+    }
+
+    static func isScript(_ path: String) -> Bool {
+        (path as NSString).pathExtension.lowercased() == "avc"
+    }
+
+    /// "bin" / "script" — for labels.
+    static func noun(_ path: String) -> String { isScript(path) ? "script" : "bin" }
+
+    /// "3 bins", "1 script", "2 bins and 1 script" — for counts of mixed items.
+    static func count(_ paths: [String]) -> String {
+        let scripts = paths.filter(isScript).count, bins = paths.count - scripts
+        let parts = [bins > 0 ? "\(bins) bin\(bins == 1 ? "" : "s")" : nil,
+                     scripts > 0 ? "\(scripts) script\(scripts == 1 ? "" : "s")" : nil].compactMap { $0 }
+        return parts.isEmpty ? "0 bins" : parts.joined(separator: " and ")
+    }
+}
+
+/// A bin or script found while browsing a project.
 struct ScannedBin: Identifiable, Hashable {
     var id: String { relativePath }
     let relativePath: String   // e.g. "Reels/Reel 1.avb"
     let name: String           // e.g. "Reel 1"
     let folder: String         // e.g. "Reels" ("" for the project root)
     let isLocked: Bool
+
+    var isScript: Bool { AvidItem.isScript(relativePath) }
 }
 
 struct FolderItem: Identifiable, Hashable {
@@ -73,8 +100,8 @@ enum ReadOnlyFS {
         return ok
     }
 
-    /// Avid writes "<Bin Name>.lck" next to "<Bin Name>.avb" while a bin is open.
-    /// We also accept "<Bin Name>.avb.lck" to be tolerant of variations.
+    /// Avid writes "<Name>.lck" next to "<Name>.avb" (or "<Name>.avc" for a script) while
+    /// it's open. We also accept "<Name>.avb.lck" to be tolerant of variations.
     static func isLocked(binFileName: String, in names: Set<String>) -> Bool {
         let stem = (binFileName as NSString).deletingPathExtension
         return names.contains(key(stem + ".lck")) || names.contains(key(binFileName + ".lck"))
@@ -128,7 +155,7 @@ enum ReadOnlyFS {
             if (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
                 let isProject = detectProjects && containsProjectFile(entry)
                 listing.folders.append(FolderItem(name: name, relativePath: rel, isProject: isProject))
-            } else if entry.pathExtension.lowercased() == "avb" {
+            } else if AvidItem.isItem(name) {
                 listing.bins.append(ScannedBin(relativePath: rel, name: (name as NSString).deletingPathExtension,
                                                folder: relative, isLocked: isLocked(binFileName: name, in: names)))
             }

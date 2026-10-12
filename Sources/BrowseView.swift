@@ -56,6 +56,8 @@ struct BrowseView: View {
 
             if editingPath { pathEditor } else { pathBar }
 
+            NewBinsToggleButton(folder: browser.relativePath)
+
             Picker("View", selection: $store.settings.browseMode) {
                 ForEach(BrowseMode.allCases, id: \.self) { mode in
                     Image(systemName: mode.symbol).help("View \(mode.title)").tag(mode)
@@ -138,7 +140,7 @@ struct BrowseView: View {
     private var pathEditor: some View {
         HStack(spacing: 6) {
             Image(systemName: "folder.fill").foregroundStyle(.blue)
-            TextField("Type or paste a folder or bin path", text: $pathText)
+            TextField("Type or paste a folder, bin or script path", text: $pathText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13, design: .monospaced))
                 .focused($pathFieldFocused)
@@ -165,7 +167,8 @@ struct BrowseView: View {
         } label: {
             HStack(spacing: 5) {
                 if let symbol { Image(systemName: symbol).foregroundStyle(.blue) }
-                Text(title).lineLimit(1).truncationMode(.middle)
+                // A minimum width so a squeezed folder shows as "D…" rather than vanishing.
+                Text(title).lineLimit(1).truncationMode(.tail).frame(minWidth: 26)
             }
             .font(.system(size: 13, weight: isLast ? .semibold : .regular))
             .foregroundStyle(isLast ? Color.primary : Color.secondary)
@@ -200,7 +203,7 @@ struct BrowseView: View {
             }
         }
         .padding(.horizontal, 9).padding(.vertical, 6)
-        .frame(width: 170)
+        .frame(width: 150)
         .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
         .help("Search “\(browser.path.last ?? store.rootName)” and the folders inside it")
     }
@@ -241,7 +244,7 @@ struct BrowseView: View {
                 var selected: String?
                 if let bin = target.bin {
                     guard let match = listing.bins.first(where: { ReadOnlyFS.key($0.relativePath) == ReadOnlyFS.key(bin) }) else {
-                        pathError = "Couldn't find the bin “\(((bin as NSString).lastPathComponent as NSString).deletingPathExtension)” in that folder."
+                        pathError = "Couldn't find the \(AvidItem.noun(bin)) “\(((bin as NSString).lastPathComponent as NSString).deletingPathExtension)” in that folder."
                         return
                     }
                     selected = match.relativePath
@@ -271,7 +274,7 @@ struct BrowseView: View {
         } else if let listing {
             if listing.folders.isEmpty && listing.bins.isEmpty {
                 EmptyState(symbol: "folder", title: "This folder is empty",
-                           message: "There are no folders or bins in here.", actionTitle: nil, action: {})
+                           message: "There are no folders, bins or scripts in here.", actionTitle: nil, action: {})
             } else if store.settings.browseMode == .icons {
                 IconGridView(listing: listing)
             } else {
@@ -300,7 +303,7 @@ struct BrowseView: View {
         let selected = browser.selectedBins
         if !selected.isEmpty {
             let allWatched = selected.allSatisfy { store.isWatched($0.relativePath) }
-            let what = selected.count == 1 ? "“\(selected[0].name)” selected" : "\(selected.count) bins selected"
+            let what = selected.count == 1 ? "“\(selected[0].name)” selected" : "\(AvidItem.count(selected.map(\.relativePath))) selected"
             return "\(what) — press Return to \(allWatched ? "stop watching" : "watch")"
         }
         if let results = searchResults {
@@ -312,7 +315,9 @@ struct BrowseView: View {
         let locked = listing.bins.filter(\.isLocked).count
         var parts: [String] = []
         if f > 0 { parts.append("\(f) folder\(f == 1 ? "" : "s")") }
-        if b > 0 { parts.append("\(b) bin\(b == 1 ? "" : "s")") }
+        let scripts = listing.bins.filter(\.isScript).count, bins = b - scripts
+        if bins > 0 { parts.append("\(bins) bin\(bins == 1 ? "" : "s")") }
+        if scripts > 0 { parts.append("\(scripts) script\(scripts == 1 ? "" : "s")") }
         if locked > 0 { parts.append("\(locked) locked") }
         return parts.isEmpty ? "Empty folder" : parts.joined(separator: " · ")
     }
@@ -543,6 +548,7 @@ struct FolderRow: View {
     let folder: FolderItem
     let subtitle: String?
     @State private var hover = false
+    @ObservedObject private var watcher = NewBinWatcher.shared
 
     var body: some View {
         Button {
@@ -553,6 +559,9 @@ struct FolderRow: View {
                     .frame(width: 28, height: 28)
                     .background((folder.isProject ? Color.purple : Color.blue).opacity(0.13),
                                 in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(alignment: .bottomTrailing) {
+                        NewBinsBadge(coverage: watcher.coverage(of: folder.relativePath)).offset(x: 5, y: 5)
+                    }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(folder.name)
                     if let subtitle {
@@ -560,6 +569,13 @@ struct FolderRow: View {
                     }
                 }
                 Spacer()
+                if watcher.coverage(of: folder.relativePath) == .direct {
+                    Label("New bin alerts", systemImage: "sparkles")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(newBinBlue)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(newBinBlue.opacity(0.13), in: Capsule())
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(hover ? .secondary : .tertiary)
@@ -570,6 +586,7 @@ struct FolderRow: View {
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .help("Open “\(folder.name)”")
+        .contextMenu { FolderContextMenu(folder: folder) }
     }
 }
 
@@ -581,7 +598,7 @@ struct BinRow: View {
     var body: some View {
         let watching = store.isWatched(bin.relativePath)
         HStack(spacing: 12) {
-            BinIcon(state: bin.isLocked ? .locked : .available)
+            BinIcon(state: bin.isLocked ? .locked : .available, isScript: bin.isScript)
             VStack(alignment: .leading, spacing: 1) {
                 Text(bin.name).font(.body.weight(watching ? .semibold : .regular))
                 if let subtitle {
@@ -617,7 +634,7 @@ struct WatchToggle: View {
         .buttonStyle(.bordered)
         .controlSize(compact ? .small : .regular)
         .tint(watching ? Color.accentColor : nil)
-        .help(watching ? "Stop watching" : "Alert me when this bin is unlocked")
+        .help(watching ? "Stop watching" : "Alert me when this \(AvidItem.noun(bin.relativePath)) is unlocked")
     }
 }
 
@@ -658,6 +675,7 @@ struct IconGridView: View {
 private struct FolderTile: View {
     let folder: FolderItem
     @State private var hover = false
+    @ObservedObject private var watcher = NewBinWatcher.shared
 
     var body: some View {
         Button {
@@ -666,6 +684,9 @@ private struct FolderTile: View {
             VStack(spacing: 6) {
                 FolderGlyph(isProject: folder.isProject, size: folder.isProject ? 38 : 46)
                     .frame(height: 54)
+                    .overlay(alignment: .bottomTrailing) {
+                        NewBinsBadge(coverage: watcher.coverage(of: folder.relativePath), size: 20).offset(x: 6, y: -2)
+                    }
                 Text(folder.name)
                     .font(.system(size: 12))
                     .multilineTextAlignment(.center)
@@ -681,6 +702,7 @@ private struct FolderTile: View {
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .help("Open “\(folder.name)”")
+        .contextMenu { FolderContextMenu(folder: folder) }
     }
 }
 
@@ -698,7 +720,7 @@ private struct BinTile: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(tint.opacity(0.15))
                     .frame(width: 56, height: 50)
-                    .overlay(Image(systemName: bin.isLocked ? "lock.fill" : "rectangle.stack.fill")
+                    .overlay(Image(systemName: itemSymbol(locked: bin.isLocked, script: bin.isScript))
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(tint))
                 if watching {
@@ -734,6 +756,19 @@ private struct BinTile: View {
     }
 }
 
+/// Right-click menu for a folder, in every view.
+struct FolderContextMenu: View {
+    let folder: FolderItem
+    @ObservedObject private var watcher = NewBinWatcher.shared
+
+    var body: some View {
+        Button("Open") { BrowserModel.shared.go(toRelative: folder.relativePath) }
+        Button(watcher.watch(for: folder.relativePath) == nil ? "Alert Me About New Bins" : "Stop Alerting Me About New Bins") {
+            watcher.toggle(folder: folder.relativePath)
+        }
+    }
+}
+
 /// Right-click menu for a bin, in every view.
 struct BinContextMenu: View {
     let bin: ScannedBin
@@ -742,8 +777,11 @@ struct BinContextMenu: View {
     var body: some View {
         let watching = store.isWatched(bin.relativePath)
         Button(watching ? "Stop Watching" : "Watch") { store.toggleWatch(bin) }
+        Button(BinOpener.showLabel) {
+            if let root = store.root { BinOpener.show([root.appendingPathComponent(bin.relativePath)]) }
+        }
         if bin.isLocked {
-            Button("Ask for This Bin…") { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name) }
+            Button(bin.isScript ? "Ask for This Script…" : "Ask for This Bin…") { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name) }
         }
     }
 }
@@ -802,6 +840,7 @@ private struct FinderColumn: View {
     let listing: FolderListing?
     @EnvironmentObject var store: AppStore
     @ObservedObject private var browser = BrowserModel.shared
+    @ObservedObject private var watcher = NewBinWatcher.shared
 
     var body: some View {
         GeometryReader { geo in
@@ -852,6 +891,12 @@ private struct FinderColumn: View {
                     .frame(width: 18)
                 Text(folder.name).lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 4)
+                if case let coverage = watcher.coverage(of: folder.relativePath), coverage != .none {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(active ? Color.white : newBinBlue.opacity(coverage == .direct ? 1 : 0.5))
+                        .help(coverage == .direct ? "New bin alerts are on for this folder" : "Covered by new bin alerts on a parent folder")
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(active ? Color.white.opacity(0.8) : Color.secondary)
@@ -865,6 +910,7 @@ private struct FinderColumn: View {
         }
         .buttonStyle(.plain)
         .help(folder.name)
+        .contextMenu { FolderContextMenu(folder: folder) }
     }
 
     private func binRow(_ bin: ScannedBin) -> some View {
@@ -878,7 +924,7 @@ private struct FinderColumn: View {
             }
         } label: {
             HStack(spacing: 7) {
-                Image(systemName: bin.isLocked ? "lock.fill" : "rectangle.stack.fill")
+                Image(systemName: itemSymbol(locked: bin.isLocked, script: bin.isScript))
                     .font(.system(size: 12))
                     .foregroundStyle(selected ? Color.white : bin.isLocked ? Color.orange : Color.green)
                     .frame(width: 18)
@@ -918,7 +964,7 @@ private struct BinPreview: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(tint.opacity(0.15))
                 .frame(width: 84, height: 76)
-                .overlay(Image(systemName: state == .locked ? "lock.fill" : "rectangle.stack.fill")
+                .overlay(Image(systemName: itemSymbol(locked: state == .locked, script: bin.isScript))
                     .font(.system(size: 34, weight: .semibold))
                     .foregroundStyle(tint))
             Text(bin.name)
@@ -933,7 +979,7 @@ private struct BinPreview: View {
                     RequestStatusChip(request: request)
                 } else {
                     Button { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name) } label: {
-                        Label("Ask for This Bin…", systemImage: "hand.raised").frame(minWidth: 130)
+                        Label(bin.isScript ? "Ask for This Script…" : "Ask for This Bin…", systemImage: "hand.raised").frame(minWidth: 130)
                     }
                     .controlSize(.large)
                 }
@@ -945,7 +991,7 @@ private struct BinPreview: View {
                 .controlSize(.large)
             } else {
                 Button { store.toggleWatch(bin) } label: {
-                    Label("Watch This Bin", systemImage: "bell.fill").frame(minWidth: 130)
+                    Label(bin.isScript ? "Watch This Script" : "Watch This Bin", systemImage: "bell.fill").frame(minWidth: 130)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -980,7 +1026,8 @@ private struct MultiBinPreview: View {
                     .foregroundStyle(Color.accentColor)
             }
             .frame(height: 90)
-            Text("\(bins.count) bins selected").font(.title3.weight(.semibold))
+            Text("\(AvidItem.count(bins.map(\.relativePath))) selected").font(.title3.weight(.semibold))
+                .multilineTextAlignment(.center)
             Text(locked == 0 ? "None are locked" : "\(locked) locked")
                 .font(.caption).foregroundStyle(.secondary)
             Button { store.toggleWatch(bins) } label: {
@@ -999,7 +1046,7 @@ private struct MultiBinPreview: View {
     }
 }
 
-/// Keyboard control while Browse Bins is on screen: Return toggles watching, ⌘A selects
+/// Keyboard control while Browse is on screen: Return toggles watching, ⌘A selects
 /// all, ↑/↓ move (⇧ to extend), ←/→ step out of / into folders in column view, Esc clears.
 /// Keys typed into a text field (search, path) are left alone.
 enum BrowseKeys {

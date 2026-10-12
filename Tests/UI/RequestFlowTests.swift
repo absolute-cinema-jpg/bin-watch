@@ -30,6 +30,7 @@ enum RequestFlowTests {
         pump(4)
         let card = alerts.items.first { if case .request = $0.kind { return true } else { return false } }
         check(card?.title == "Sam would like “Music”", "a request card appears: \(card?.title ?? "none")")
+        check(card?.noun == "bin", "…labelled as a bin request")
         check(samBox.replies(to: [ask.id]).first?.answer == .seen, "Sam sees you've seen it")
         if let card { AlertCenter.shared.respond(card.id, .primary) }
         pump(1)
@@ -45,6 +46,14 @@ enum RequestFlowTests {
         try! samBox.post(resolved)
         pump(4)
         check(!alerts.items.contains { $0.title == "Sam would like “B-Roll”" }, "it disappears by itself once the bin is free")
+
+        let scriptAsk = BinRequest(id: UUID(), from: sam, to: nil, binName: "Opening", binLocation: "Documentary S1 › Scripts",
+                                   binPath: "Documentary S1/Scripts/Opening.avc", message: nil, created: Date(), status: .open)
+        try! samBox.post(scriptAsk)
+        pump(4)
+        let scriptCard = alerts.items.first { $0.title == "Sam would like “Opening”" }
+        check(scriptCard?.noun == "script", "a request for a script is labelled as a script request")
+        if let scriptCard { AlertCenter.shared.respond(scriptCard.id, .dismissed) }
 
         print("Bin requests — you ask Sam")
         check(fm.fileExists(atPath: lock.path), "Reel 2 is locked")
@@ -68,9 +77,9 @@ enum RequestFlowTests {
         check(!alerts.items.contains { if case .reply = $0.kind { return true } else { return false } }, "the reply cards are cleared")
         check(samBox.requests().first { $0.id == mine!.id }?.status == .resolved, "Sam's Bin Watch learns the request is done")
         check(requests.openRequest(for: reel2) == nil, "no open request left")
-        if let available = alerts.items.first(where: { $0.kind == .available }) { AlertCenter.shared.acknowledge(available.id) }
+        if let available = alerts.items.first(where: { $0.kind == .available }) { AlertCenter.shared.respond(available.id, .secondary) }
         pump(0.5)
-        check(!store.isWatched(reel2), "“Got it” stops watching")
+        check(!store.isWatched(reel2), "“Dismiss” stops watching")
         fm.createFile(atPath: lock.path, contents: Data())
         requests.turnOff()
     }
