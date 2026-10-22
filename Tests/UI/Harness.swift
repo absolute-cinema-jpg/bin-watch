@@ -28,6 +28,20 @@ func click(_ x: CGFloat, _ yFromTop: CGFloat, _ mods: NSEvent.ModifierFlags = []
     pump(0.4)
 }
 
+/// A real double-click: two clicks, the second with clickCount 2.
+func doubleClick(_ x: CGFloat, _ yFromTop: CGFloat, _ mods: NSEvent.ModifierFlags = []) {
+    let p = NSPoint(x: x, y: window.contentView!.bounds.height - yFromTop)
+    for count in [1, 2] {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let e = NSEvent.mouseEvent(with: type, location: p, modifierFlags: mods,
+                                       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                       context: nil, eventNumber: 0, clickCount: count, pressure: 1)!
+            NSApp.postEvent(e, atStart: false)
+        }
+    }
+    pump(0.5)
+}
+
 func key(_ code: UInt16, _ mods: NSEvent.ModifierFlags = []) {
     let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods,
                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
@@ -85,10 +99,12 @@ func snapshot(_ out: String) {
             }
             exit(0)
         }
+        BinOpener.testHook = { _ in }       // never open Avid or Finder from tests
         InteractionTests.run(bm, store)
         BinOpener.testHook = { _ in }       // never open Avid or Finder from tests
         RequestFlowTests.run(store, dir: dir)
         NewBinsFlowTests.run(store, dir: dir)
+        check(AlertCenter.shared.chimesSuppressed > 0, "alerts were raised during the tests, but no sound was played")
         print(fails == 0 ? "interaction tests passed" : "\(fails) interaction tests FAILED")
         exit(fails == 0 ? 0 : 1)
     }

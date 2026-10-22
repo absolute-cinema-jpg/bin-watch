@@ -132,8 +132,10 @@ final class AlertCenter {
                       width: size.width, height: size.height)
     }
 
-    /// Tests set this so alerts are tracked but never put on screen.
+    /// Tests set this so alerts are tracked but never put on screen — and never make a sound.
     static var headless = false
+    /// How many chimes would have played (tests check this instead of listening).
+    private(set) var chimesSuppressed = 0
 
     private func showPanel() {
         guard !Self.headless else { return }
@@ -196,6 +198,7 @@ final class AlertCenter {
 
     /// Plays the chosen alert sound. `scale` softens the repeat reminders.
     func playChime(scale: Double = 1) {
+        guard !Self.headless else { chimesSuppressed += 1; return }
         playing?.stop()
         let settings = AppStore.shared.settings
         let sound = SoundLibrary.sound(settings.soundName) ?? SoundLibrary.sound("Glass")

@@ -33,12 +33,24 @@ final class BrowserModel: ObservableObject {
 
     var selectedBins: [ScannedBin] { visibleBins.filter { selection.contains($0.relativePath) } }
 
-    /// Finder-style clicking: plain click selects one, ⌘ adds/removes, ⇧ selects a range.
+    /// The item the previous click landed on. A double-click only opens an item when both
+    /// clicks hit it — so double-clicking a folder (which opens on the first click) can never
+    /// open whatever bin the second click happens to land on.
+    private var lastClicked: String?
+
+    /// Finder-style clicking: plain click selects one, ⌘ adds/removes, ⇧ selects a range,
+    /// and a double-click opens the bin or script (in Avid if it's running, else in Finder).
     func click(_ relativePath: String) {
         NSApp.keyWindow?.makeFirstResponder(nil)   // so Return goes to the selection, not a text field
-        // The modifiers of the click being handled (falls back to the keyboard's current state).
-        let modifiers = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
-        if modifiers.contains(.command) {
+        // The click being handled (falls back to the keyboard's current state).
+        let event = NSApp.currentEvent
+        let modifiers = event?.modifierFlags ?? NSEvent.modifierFlags
+        let isDoubleClick = (event?.clickCount ?? 1) >= 2 && lastClicked == relativePath
+        lastClicked = relativePath
+        if isDoubleClick && !modifiers.contains(.command) && !modifiers.contains(.shift) {
+            selectOnly(relativePath)
+            open([relativePath])
+        } else if modifiers.contains(.command) {
             if selection.contains(relativePath) { selection.remove(relativePath) } else { selection.insert(relativePath) }
             anchor = relativePath
             cursor = relativePath
@@ -50,11 +62,23 @@ final class BrowserModel: ObservableObject {
         }
     }
 
+    /// Open bins/scripts: one opens in Avid if it's running; several, or no Avid, show in Finder.
+    func open(_ relativePaths: [String]) {
+        guard let root = AppStore.shared.root, !relativePaths.isEmpty else { return }
+        BinOpener.show(relativePaths.map { root.appendingPathComponent($0) })
+    }
+
+    /// ⌘O / ⌘↓: open what's selected.
+    func openSelection() {
+        open(selectedBins.map(\.relativePath))
+    }
+
     func selectAll() {
         selection = Set(visibleBins.map(\.relativePath))
     }
 
     func clearSelection() {
+        lastClicked = nil
         selection = []
         anchor = nil
         cursor = nil
@@ -102,6 +126,7 @@ final class BrowserModel: ObservableObject {
     /// Go to a folder, optionally selecting one bin in it.
     func go(to newPath: [String], select bin: String? = nil) {
         if let bin { selectOnly(bin) } else { clearSelection() }
+        lastClicked = bin
         scrollTarget = bin
         guard newPath != path else { return }
         backStack.append(path)

@@ -304,7 +304,10 @@ struct BrowseView: View {
         if !selected.isEmpty {
             let allWatched = selected.allSatisfy { store.isWatched($0.relativePath) }
             let what = selected.count == 1 ? "“\(selected[0].name)” selected" : "\(AvidItem.count(selected.map(\.relativePath))) selected"
-            return "\(what) — press Return to \(allWatched ? "stop watching" : "watch")"
+            let open = selected.count == 1
+                ? "double-click or ⌘O to \(BinOpener.runningAvid != nil ? "open in Avid" : "show in Finder")"
+                : "⌘O to show them in Finder"
+            return "\(what) — Return to \(allWatched ? "stop watching" : "watch") · \(open)"
         }
         if let results = searchResults {
             let n = results.folders.count + results.bins.count
@@ -487,7 +490,12 @@ struct SelectableBinRow: View {
 struct EmptySpaceTap: View {
     let action: () -> Void
     var body: some View {
-        Color.clear.contentShape(Rectangle()).onTapGesture(perform: action)
+        Color.clear.contentShape(Rectangle()).onTapGesture {
+            // The second click of a double-click isn't "clicking empty space": otherwise
+            // double-clicking a folder would open it, then close it again.
+            guard (NSApp.currentEvent?.clickCount ?? 1) < 2 else { return }
+            action()
+        }
     }
 }
 
@@ -1046,8 +1054,9 @@ private struct MultiBinPreview: View {
     }
 }
 
-/// Keyboard control while Browse is on screen: Return toggles watching, ⌘A selects
-/// all, ↑/↓ move (⇧ to extend), ←/→ step out of / into folders in column view, Esc clears.
+/// Keyboard control while Browse is on screen: Return toggles watching, ⌘O / ⌘↓ open,
+/// ⌘A selects all, ↑/↓ move (⇧ to extend), ←/→ step out of / into folders in column
+/// view, Esc clears.
 /// Keys typed into a text field (search, path) are left alone.
 enum BrowseKeys {
     private static var monitor: Any?
@@ -1080,6 +1089,11 @@ enum BrowseKeys {
             let bins = browser.selectedBins
             guard !bins.isEmpty else { return false }
             AppStore.shared.toggleWatch(bins)
+            return true
+        case 31 where modifiers == [.command],          // ⌘O
+             125 where modifiers == [.command]:         // ⌘↓ (Finder's "open")
+            guard !browser.selection.isEmpty else { return false }
+            browser.openSelection()
             return true
         case 0 where modifiers == [.command]:           // ⌘A
             browser.selectAll()

@@ -30,6 +30,26 @@ enum InteractionTests {
         click(x, 90); pump(0.5);      check(bm.path.last == "Old", "clicking a folder opens it")
         bm.go(to: ["Documentary S1", "3 Cuts"]); pump(0.6)
 
+        print("Opening bins (double-click, ⌘O)")
+        var opened: [String] = []
+        BinOpener.testHook = { opened = $0.map(\.lastPathComponent) }
+        click(x, rowY[1]);                 check(opened.isEmpty, "a single click only selects")
+        doubleClick(x, rowY[1]);           check(opened == ["Reel 2.avb"] && bm.selection == [r[1]], "double-clicking a bin opens it")
+        opened = []
+        doubleClick(x, rowY[2], .command); check(opened.isEmpty, "⌘-double-click doesn't open")
+        bm.clearSelection(); opened = []
+        doubleClick(x, 90); pump(0.5)
+        check(bm.path.last == "Old" && opened.isEmpty, "double-clicking a folder opens the folder, never a bin in it")
+        bm.go(to: ["Documentary S1", "3 Cuts"]); pump(0.6)
+        click(x, rowY[0]); key(31, .command)
+        check(opened == ["Reel 1.avb"], "⌘O opens the selected bin")
+        opened = []
+        click(x, rowY[3], .command); key(125, .command)
+        check(Set(opened) == ["Reel 1.avb", "Reel 4.avb"], "⌘↓ opens a multiple selection (shown in Finder)")
+        opened = []; key(53); key(31, .command)
+        check(opened.isEmpty, "⌘O with nothing selected does nothing")
+        BinOpener.testHook = { _ in }
+
         print("Icon view — mouse")
         store.settings.browseMode = .icons; pump(0.8)
         let tileX: [CGFloat] = [457, 595, 733, 871]
@@ -37,6 +57,11 @@ enum InteractionTests {
         click(tileX[2], 104, .command);    check(bm.selection == [r[0], r[2]], "⌘-click adds a tile")
         click(tileX[3], 104, .shift);      check(bm.selection == Set(r[2...3]), "⇧-click selects a range")
         click(600, 450);                   check(bm.selection.isEmpty, "clicking empty space deselects")
+        var tileOpened: [String] = []
+        BinOpener.testHook = { tileOpened = $0.map(\.lastPathComponent) }
+        doubleClick(tileX[1], 104);        check(tileOpened == ["Reel 2.avb"], "double-clicking a tile opens it")
+        BinOpener.testHook = { _ in }
+        key(53)
 
         print("Icon view — keyboard")
         key(124);                     check(bm.selection == [r[0]], "→ selects the first bin")
@@ -70,5 +95,14 @@ enum InteractionTests {
         click(800, 450);                   check(bm.selection.isEmpty && bm.path == ["Documentary S1", "3 Cuts"], "clicking empty space in the column deselects")
         click(580, 450); pump(0.3);        check(bm.path == ["Documentary S1"], "clicking empty space in an earlier column closes the columns after it")
         click(580, 121); pump(0.5);        check(bm.path == ["Documentary S1", "3 Cuts"], "clicking a folder in a column opens it")
+        var columnOpened: [String] = []
+        BinOpener.testHook = { columnOpened = $0.map(\.lastPathComponent) }
+        doubleClick(800, 96);              check(columnOpened == ["Reel 1.avb"], "double-clicking a bin in a column opens it")
+        columnOpened = []
+        click(580, 400); pump(0.3)         // back to Documentary S1's column
+        doubleClick(580, 121); pump(0.5)   // double-click the "3 Cuts" folder
+        check(columnOpened.isEmpty && bm.path == ["Documentary S1", "3 Cuts"],
+              "double-clicking a folder in a column opens it and leaves it open")
+        BinOpener.testHook = { _ in }
     }
 }

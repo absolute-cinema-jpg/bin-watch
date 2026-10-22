@@ -23,6 +23,7 @@ The build only needs Apple's Command Line Tools. Xcode isn't required.
    - **Search:** looks in the current folder and everything inside it.
    - **Selecting bins:** click a bin to select it, ⌘-click to add or remove one, ⇧-click to select a range, and ⌘A to select every bin in the folder. ↑/↓ move the selection and Esc clears it.
    - **Return:** toggles watching for the selection. If every selected bin is already watched, Return stops watching them; otherwise it watches them all. Folders still open with a single click.
+   - **Opening a bin:** double-click a bin or script, or select it and press ⌘O (or ⌘↓). It opens in Media Composer if Avid is already running, or is shown in Finder if it isn't, just like **Show Bin** on alerts. Several selected items are shown together in Finder. Double-clicking a folder just opens the folder; it never opens a bin the second click happens to land on.
 4. Click **Watch** on the bins you're waiting for. The **Watching** page shows their live status and has a **Clear All** button, which asks for confirmation first.
 
 When a watched bin goes from locked to free:
