@@ -11,8 +11,8 @@ final class Navigation: ObservableObject {
     /// The bin the "Ask for this bin" sheet is open for.
     @Published var askTarget: AskTarget?
 
-    func ask(relativePath: String, name: String) {
-        askTarget = AskTarget(relativePath: relativePath, name: name)
+    func ask(relativePath: String, name: String, holder: String? = nil) {
+        askTarget = AskTarget(relativePath: relativePath, name: name, holder: holder)
     }
 
     /// Jump the browser to a folder (e.g. "show me where this watched bin lives").
@@ -217,12 +217,17 @@ struct WatchedRow: View {
         let state = store.states[bin.id] ?? .checking
         HStack(spacing: 12) {
             BinIcon(state: state, isScript: bin.isScript)
-            Text(bin.name).font(.body.weight(.medium))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(bin.name).font(.body.weight(.medium))
+                if state == .locked, let holder = store.holders[bin.id] {
+                    LockedLabel(holder: holder).font(.caption).foregroundStyle(.orange)
+                }
+            }
             Spacer()
             if let request = requests.openRequest(for: bin.relativePath) {
                 RequestStatusChip(request: request)
             } else if state == .locked {
-                AskButton(relativePath: bin.relativePath, name: bin.name)
+                AskButton(relativePath: bin.relativePath, name: bin.name, holder: store.holders[bin.id])
             }
             StatePill(state: state)
             Button {

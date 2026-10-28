@@ -14,9 +14,16 @@ final class AppStore: ObservableObject {
             guard settings != oldValue else { return }
             save(settings, "settings")
             if settings.pollInterval != oldValue.pollInterval { startPolling() }
+            if settings.showLockHolders != oldValue.showLockHolders {
+                LockHolders.enabled = settings.showLockHolders
+                if !settings.showLockHolders { holders = [:] }
+                BrowserModel.shared.listingCache = [:]
+            }
         }
     }
     @Published private(set) var states: [UUID: BinState] = [:]
+    /// Who has each locked watched bin open (as Avid wrote it in the lock file).
+    @Published private(set) var holders: [UUID: String] = [:]
     @Published private(set) var pendingAlerts: Set<UUID> = []
     @Published private(set) var customSounds: [String] = SoundLibrary.customSounds()
 
@@ -37,6 +44,7 @@ final class AppStore: ObservableObject {
         watched = load("watchedBins") ?? []
         settings = load("settings") ?? AppSettings()
         save(settings, "settings")      // store any settings migration straight away
+        LockHolders.enabled = settings.showLockHolders
         migrateFromProjects()
         resolveRoot()
         for bin in watched { states[bin.id] = .checking }
@@ -183,6 +191,7 @@ final class AppStore: ObservableObject {
         RequestCenter.shared.cancelRequest(for: bin.relativePath)
         watched.removeAll { $0.id == bin.id }
         states[bin.id] = nil
+        holders[bin.id] = nil
         detector.forget(bin.id)
         pendingAlerts.remove(bin.id)
         AlertCenter.shared.remove(bin.id)
@@ -221,10 +230,12 @@ final class AppStore: ObservableObject {
 
         probing = true
         queue.async { [weak self] in
-            let results = ReadOnlyFS.probe(jobs)
+            var holders: [UUID: String] = [:]
+            let results = ReadOnlyFS.probe(jobs, holders: &holders)
             let online = root.map(ReadOnlyFS.isReachable)
             DispatchQueue.main.async {
                 self?.apply(results, unresolved: unresolved, online: online)
+                if self?.holders != holders { self?.holders = holders }
                 self?.probing = false
             }
         }

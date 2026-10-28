@@ -4,6 +4,20 @@ struct AskTarget: Identifiable {
     var id: String { relativePath }
     let relativePath: String
     let name: String
+    var holder: String? = nil          // who has it open, from the lock file
+}
+
+/// "Locked" or "Locked by Sam Okafor" / "Locked by you" / "Locked by EDIT-2".
+struct LockedLabel: View {
+    let holder: String?
+    @ObservedObject private var requests = RequestCenter.shared
+
+    var body: some View {
+        Label(holder.map { "Locked by \(requests.describe(holder: $0))" } ?? "Locked", systemImage: "lock.fill")
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .help(holder.map { "Avid's lock file says it's open on “\($0)”" } ?? "Locked")
+    }
 }
 
 private let requestPurple = Color(red: 0.55, green: 0.42, blue: 0.98)
@@ -29,6 +43,11 @@ struct AskSheet: View {
                     Text("Ask for “\(target.name)”").font(.title3.weight(.semibold)).lineLimit(2)
                     Text(displayPath((target.relativePath as NSString).deletingLastPathComponent, root: store.rootName))
                         .font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    if let holder = target.holder {
+                        Label("Open on “\(holder)”" + (requests.person(holding: holder).map { " — that's \($0.person.name)" } ?? ""),
+                              systemImage: "lock.fill")
+                            .font(.callout).foregroundStyle(.orange)
+                    }
                 }
             }
 
@@ -36,6 +55,10 @@ struct AskSheet: View {
         }
         .padding(22)
         .frame(width: 460)
+        .onAppear {
+            // Ask the person who has it open, if they use Bin Watch.
+            if let holder = target.holder, let person = requests.person(holding: holder) { recipient = person.id }
+        }
     }
 
     private var form: some View {
@@ -48,7 +71,8 @@ struct AskSheet: View {
                 Text("Everyone using Bin Watch").tag(UUID?.none)
                 if !requests.people.isEmpty { Divider() }
                 ForEach(requests.people) { status in
-                    Text("\(status.person.name) — \(status.person.computer)\(status.isOnline ? "" : " (away)")")
+                    let hasIt = target.holder.map(status.person.matches(lockHolder:)) ?? false
+                    Text("\(status.person.name) — \(status.person.computer)\(hasIt ? " (has it open)" : status.isOnline ? "" : " (away)")")
                         .tag(Optional(status.id))
                 }
             }
@@ -154,11 +178,12 @@ struct RequestStatusChip: View {
 struct AskButton: View {
     let relativePath: String
     let name: String
+    var holder: String? = nil
     var compact = false
 
     var body: some View {
         Button {
-            Navigation.shared.ask(relativePath: relativePath, name: name)
+            Navigation.shared.ask(relativePath: relativePath, name: name, holder: holder)
         } label: {
             if compact {
                 Image(systemName: "hand.raised")

@@ -10,9 +10,9 @@ func elapsedMS(since start: DispatchTime) -> Int {
 // ─────────────────────────────────────────────────────────────────────────────
 //  ReadOnlyFS — the ONLY code in Bin Watch that touches an Avid project.
 //
-//  It only ever *lists directory contents*. It never opens, reads, creates,
-//  writes, renames, moves or deletes any file — not even the .lck files
-//  (it only checks whether their names are present).
+//  It lists directory contents, and — only if "Show who has it open" is on — reads the
+//  first 1 KB of a .lck file once, to show whose name Avid wrote in it (see LockHolders).
+//  It never creates, writes, renames, moves or deletes anything.
 //
 //  On top of that, the app is built with the macOS App Sandbox and the
 //  `files.user-selected.read-only` entitlement, so the operating system itself
@@ -55,6 +55,8 @@ struct ScannedBin: Identifiable, Hashable {
     let name: String           // e.g. "Reel 1"
     let folder: String         // e.g. "Reels" ("" for the project root)
     let isLocked: Bool
+    /// Who has it open, as Avid wrote it in the lock file (usually a computer name).
+    var lockedBy: String? = nil
 
     var isScript: Bool { AvidItem.isScript(relativePath) }
 }
@@ -103,28 +105,49 @@ enum ReadOnlyFS {
     /// Avid writes "<Name>.lck" next to "<Name>.avb" (or "<Name>.avc" for a script) while
     /// it's open. We also accept "<Name>.avb.lck" to be tolerant of variations.
     static func isLocked(binFileName: String, in names: Set<String>) -> Bool {
+        lockKey(for: binFileName, in: names) != nil
+    }
+
+    /// The (normalised) name of the lock file for a bin, if there is one.
+    static func lockKey(for binFileName: String, in names: Set<String>) -> String? {
         let stem = (binFileName as NSString).deletingPathExtension
-        return names.contains(key(stem + ".lck")) || names.contains(key(binFileName + ".lck"))
+        return [key(stem + ".lck"), key(binFileName + ".lck")].first(where: names.contains)
+    }
+
+    /// Real names of the entries in a directory, keyed by normalised name. nil if unreadable.
+    static func realNames(in directory: URL) -> [String: String]? {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return nil }
+        return Dictionary(names.map { (key($0), $0) }, uniquingKeysWith: { a, _ in a })
     }
 
     /// Checks the lock state of each watched bin. Each directory is listed once per call.
     static func probe(_ jobs: [ProbeJob]) -> [UUID: BinState] {
+        var holders: [UUID: String] = [:]
+        return probe(jobs, holders: &holders)
+    }
+
+    /// As above, also noting who has each locked bin open (when that's turned on).
+    static func probe(_ jobs: [ProbeJob], holders: inout [UUID: String]) -> [UUID: BinState] {
         let start = DispatchTime.now()
         defer { if !jobs.isEmpty { fsLog.debug("probe \(jobs.count) bins took \(elapsedMS(since: start))ms") } }
-        var listings: [URL: Set<String>?] = [:]
+        var listings: [URL: [String: String]?] = [:]
         var results: [UUID: BinState] = [:]
         for job in jobs {
             if listings[job.directory] == nil {
-                listings[job.directory] = .some(listing(of: job.directory))
+                listings[job.directory] = .some(realNames(in: job.directory))
             }
-            guard let names = listings[job.directory] ?? nil else {
+            guard let real = listings[job.directory] ?? nil else {
                 results[job.id] = .offline
                 continue
             }
+            let names = Set(real.keys)
             if !names.contains(key(job.binFileName)) {
                 results[job.id] = .missing
-            } else if isLocked(binFileName: job.binFileName, in: names) {
+            } else if let lock = lockKey(for: job.binFileName, in: names) {
                 results[job.id] = .locked
+                if let name = real[lock], let holder = LockHolders.holder(of: job.directory.appendingPathComponent(name)) {
+                    holders[job.id] = holder
+                }
             } else {
                 results[job.id] = .available
             }
@@ -143,11 +166,12 @@ enum ReadOnlyFS {
             if ms > 300 { fsLog.notice("slow listFolder '\(relative, privacy: .public)' took \(ms)ms") }
         }
         guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: [.isDirectoryKey],
+            at: dir, includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { return nil }
 
-        let names = Set(entries.map { key($0.lastPathComponent) })
+        let byKey = Dictionary(entries.map { (key($0.lastPathComponent), $0) }, uniquingKeysWith: { a, _ in a })
+        let names = Set(byKey.keys)
         var listing = FolderListing()
         for entry in entries {
             let name = entry.lastPathComponent
@@ -156,8 +180,10 @@ enum ReadOnlyFS {
                 let isProject = detectProjects && containsProjectFile(entry)
                 listing.folders.append(FolderItem(name: name, relativePath: rel, isProject: isProject))
             } else if AvidItem.isItem(name) {
+                let lock = lockKey(for: name, in: names).flatMap { byKey[$0] }
                 listing.bins.append(ScannedBin(relativePath: rel, name: (name as NSString).deletingPathExtension,
-                                               folder: relative, isLocked: isLocked(binFileName: name, in: names)))
+                                               folder: relative, isLocked: lock != nil,
+                                               lockedBy: lock.flatMap { LockHolders.holder(of: $0) }))
             }
         }
         listing.folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -203,6 +229,76 @@ enum ReadOnlyFS {
             walk(dir.appendingPathComponent(folder.name), relative: folder.relativePath,
                  depth: depth + 1, maxDepth: maxDepth, into: &result)
         }
+    }
+}
+
+/// Who has a bin or script open. Avid writes the name of the computer (or user) holding a
+/// lock into its .lck file. This is the only time Bin Watch opens a file in your project,
+/// and only to read it: at most 1 KB, closed straight away, and just once per lock — the
+/// answer is remembered until the lock file changes. Turn it off in Settings and Bin Watch
+/// never opens a .lck file at all.
+enum LockHolders {
+    private static let lock = NSLock()
+    private static var _enabled = true
+    private static var cache: [String: (modified: Date, holder: String?)] = [:]
+
+    static var enabled: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _enabled }
+        set { lock.lock(); _enabled = newValue; if !newValue { cache = [:] }; lock.unlock() }
+    }
+
+    /// How many lock files have actually been read (tests check the caching).
+    private(set) static var reads = 0
+
+    static func holder(of lockFile: URL) -> String? {
+        guard enabled else { return nil }
+        let modified = (try? lockFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+        let path = lockFile.path
+        lock.lock()
+        if let hit = cache[path], hit.modified == modified { lock.unlock(); return hit.holder }
+        lock.unlock()
+
+        let holder = readFirstKilobyte(path).flatMap(parse)
+        lock.lock()
+        cache[path] = (modified, holder)
+        reads += 1
+        if cache.count > 2000 { cache = [:] }
+        lock.unlock()
+        return holder
+    }
+
+    /// Opens read-only and non-blocking, reads up to 1 KB, closes immediately.
+    private static func readFirstKilobyte(_ path: String) -> Data? {
+        let fd = open(path, O_RDONLY | O_NONBLOCK)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        let count = read(fd, &buffer, buffer.count)
+        return count > 0 ? Data(buffer.prefix(count)) : nil
+    }
+
+    /// Pulls the name out of a lock file: plain text or UTF-16, padded with zeros.
+    static func parse(_ data: Data) -> String? {
+        let bytes = [UInt8](data.prefix(1024))
+        guard !bytes.isEmpty else { return nil }
+        var text: String
+        // UTF-16LE: letters with a zero byte after each.
+        let pairs = stride(from: 0, to: bytes.count - 1, by: 2).map { (bytes[$0], bytes[$0 + 1]) }
+        let wide = pairs.prefix { $0 != (0, 0) }
+        if wide.count >= 2, wide.filter({ $0.1 == 0 }).count * 10 >= wide.count * 8 {
+            let units = wide.map { UInt16($0.0) | UInt16($0.1) << 8 }
+            text = String(decoding: units, as: UTF16.self)
+        } else {
+            let narrow = Array(bytes.prefix { $0 != 0 })
+            text = String(bytes: narrow, encoding: .utf8) ?? String(bytes: narrow, encoding: .macOSRoman) ?? ""
+        }
+        // The first run of printable text.
+        text = text.components(separatedBy: .controlCharacters)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty } ?? ""
+        text = String(text.unicodeScalars.filter { !CharacterSet.illegalCharacters.contains($0) })
+        guard !text.isEmpty, text.count <= 128 else { return nil }
+        return text
     }
 }
 

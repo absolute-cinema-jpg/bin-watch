@@ -23,6 +23,22 @@ enum RequestFlowTests {
         check(requests.people.map(\.person.name) == ["Sam"] && requests.people.first?.isOnline == true, "you can see Sam is online")
         check(samBox.people().contains { $0.person.id == requests.me.id }, "Sam can see you")
 
+        print("Who has it open")
+        let samsMac = Person(id: sam.id, name: "Sam", computer: "Edit 2", hostName: "EDIT-2.local")
+        let samBox2 = MailboxClient(folder: box, me: samsMac)
+        try! samBox2.publishPresence()
+        try! Data("EDIT-2".utf8).write(to: lock)            // Sam's Avid has Reel 2 open
+        store.ensureWatched(relativePath: reel2)
+        pump(5)
+        let watchedReel2 = store.watched.first { $0.relativePath == reel2 }
+        check(watchedReel2.flatMap { store.holders[$0.id] } == "EDIT-2", "the Watching page knows who has Reel 2 open")
+        check(requests.describe(holder: "EDIT-2") == "Sam", "…and recognises it's Sam's Mac")
+        check(requests.person(holding: "EDIT-2")?.id == sam.id, "…so asking for it goes to Sam by default")
+        check(requests.describe(holder: "SOMEONE-ELSE") == "SOMEONE-ELSE", "an unknown Mac is shown by its name")
+        check(requests.describe(holder: ProcessInfo.processInfo.hostName) == "you", "your own Mac is shown as “you”")
+        if let w = watchedReel2 { store.unwatch(w) }
+        try! Data().write(to: lock)
+
         print("Bin requests — Sam asks you")
         let ask = BinRequest(id: UUID(), from: sam, to: nil, binName: "Music", binLocation: "Documentary S1",
                              binPath: "Documentary S1/Music.avb", message: "Need to add the score", created: Date(), status: .open)

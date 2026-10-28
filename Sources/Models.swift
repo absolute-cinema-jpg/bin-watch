@@ -49,6 +49,7 @@ struct AppSettings: Codable, Equatable {
     var pollInterval: Double = 2
     var showMenuBarIcon = true
     var browseMode = BrowseMode.list
+    var showLockHolders = true
 
     init() {}
 
@@ -64,6 +65,7 @@ struct AppSettings: Codable, Equatable {
         pollInterval = try c.decodeIfPresent(Double.self, forKey: .pollInterval) ?? d.pollInterval
         showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? d.showMenuBarIcon
         browseMode = try c.decodeIfPresent(BrowseMode.self, forKey: .browseMode) ?? d.browseMode
+        showLockHolders = try c.decodeIfPresent(Bool.self, forKey: .showLockHolders) ?? d.showLockHolders
         // Version 2: "Got it" also stops watching, by default.
         if savedVersion < 2 { stopWatchingAfterAlert = true }
         version = AppSettings.currentVersion

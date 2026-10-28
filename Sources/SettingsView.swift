@@ -111,6 +111,12 @@ struct SettingsView: View {
                         Text("10 seconds").tag(10.0)
                     }
                     Toggle("Show icon in the menu bar", isOn: $store.settings.showMenuBarIcon)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Toggle("Show who has a locked bin or script open", isOn: $store.settings.showLockHolders)
+                        Text("Reads the name Avid writes in the lock file — once per lock, read-only. Turn off and Bin Watch never opens lock files, only checks they exist.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Toggle("Open Bin Watch when I log in", isOn: $launchAtLogin)
                         .onChange(of: launchAtLogin) { setLaunchAtLogin($0) }
                     if let loginError {
@@ -124,7 +130,7 @@ struct SettingsView: View {
                             .font(.title2).foregroundStyle(.green)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Read-only by design").font(.headline)
-                            Text("Bin Watch only looks at which files exist in your monitored folder. macOS grants it read-only access, so it can't create, change, move or delete anything there — even by accident. The only shared folder it writes to is the request mailbox, which can't be inside an Avid project.")
+                            Text("Bin Watch only looks at which files exist in your monitored folder (and, if you allow it, reads the name inside a lock file). macOS grants it read-only access, so it can't create, change, move or delete anything there — even by accident. The only shared folder it writes to is the request mailbox, which can't be inside an Avid project.")
                                 .font(.callout).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

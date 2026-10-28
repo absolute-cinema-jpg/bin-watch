@@ -21,6 +21,22 @@ struct Person: Codable, Equatable, Identifiable {
     let id: UUID
     var name: String
     var computer: String
+    /// The Mac's network name (e.g. "Edit-2"), which Avid may use in lock files.
+    var hostName: String? = nil
+
+    /// Is this the person whose Mac (or name) Avid wrote into a lock file?
+    func matches(lockHolder: String) -> Bool {
+        let holder = Self.normalize(lockHolder)
+        guard !holder.isEmpty else { return false }
+        return [computer, hostName, name].compactMap { $0 }.contains { Self.normalize($0) == holder }
+    }
+
+    /// "Sam's Mac Pro", "SAMS-MAC-PRO" and "sams-mac-pro.local" all compare equal.
+    static func normalize(_ name: String) -> String {
+        var s = name.lowercased()
+        if s.hasSuffix(".local") { s.removeLast(6) }
+        return String(s.unicodeScalars.filter(CharacterSet.alphanumerics.contains).map(Character.init))
+    }
 }
 
 struct BinRequest: Codable, Equatable, Identifiable {

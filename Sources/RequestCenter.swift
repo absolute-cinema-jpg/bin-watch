@@ -46,7 +46,23 @@ final class RequestCenter: ObservableObject {
     private var shownReplies: Set<String> = []
     private var replyCardsByRequest: [UUID: [UUID]] = [:]
 
-    var me: Person { Person(id: myID, name: myName, computer: Host.current().localizedName ?? "Mac") }
+    var me: Person {
+        Person(id: myID, name: myName, computer: Host.current().localizedName ?? "Mac",
+               hostName: ProcessInfo.processInfo.hostName)
+    }
+
+    // MARK: Who has it open
+
+    /// The Bin Watch user whose Mac matches the name in a lock file, if any.
+    func person(holding holder: String) -> PersonStatus? {
+        people.first { $0.person.matches(lockHolder: holder) }
+    }
+
+    /// "you", a colleague's Bin Watch name, or the name exactly as Avid wrote it.
+    func describe(holder: String) -> String {
+        if me.matches(lockHolder: holder) { return "you" }
+        return person(holding: holder)?.person.name ?? holder
+    }
     var isSetUp: Bool { client != nil }
 
     private init() {

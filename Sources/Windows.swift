@@ -92,8 +92,12 @@ private struct MenuBinRow: View {
             BinIcon(state: state, isScript: bin.isScript)
             VStack(alignment: .leading, spacing: 1) {
                 Text(bin.name).font(.callout.weight(.medium)).lineLimit(1)
-                Text(displayPath(bin.folder, root: store.rootName))
-                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                if state == .locked, let holder = store.holders[bin.id] {
+                    LockedLabel(holder: holder).font(.caption2).foregroundStyle(.orange)
+                } else {
+                    Text(displayPath(bin.folder, root: store.rootName))
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             Spacer()
             if hover {

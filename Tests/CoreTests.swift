@@ -52,6 +52,46 @@ func check(_ cond: Bool, _ msg: String) {
               "single items are named correctly")
         for f in ["Opening.avc", "Closing.avc", "Opening.lck"] { try? fm.removeItem(at: root.appendingPathComponent("Reels/" + f)) }
 
+        print("Who has it open (lock file contents)")
+        func utf16(_ s: String) -> Data { var d = Data(); for u in s.utf16 { d.append(UInt8(u & 0xff)); d.append(UInt8(u >> 8)) }; return d }
+        check(LockHolders.parse(Data("EDIT-2".utf8) + Data(repeating: 0, count: 200)) == "EDIT-2", "plain text padded with zeros")
+        check(LockHolders.parse(utf16("Sam's Mac Pro") + Data(repeating: 0, count: 64)) == "Sam's Mac Pro", "UTF-16 text")
+        check(LockHolders.parse(Data("  ASSIST-1\r\n".utf8)) == "ASSIST-1", "trims spaces and line endings")
+        check(LockHolders.parse(Data("EDIT-3".utf8) + Data([0, 0x13, 0x88, 0x01])) == "EDIT-3", "ignores binary after the name")
+        check(LockHolders.parse(Data()) == nil && LockHolders.parse(Data([0, 0, 0, 0])) == nil, "empty or blank → no name")
+        let reelsDir = root.appendingPathComponent("Reels")
+        let lockURL = reelsDir.appendingPathComponent("Reel 1.lck")
+        try Data("EDIT-2".utf8).write(to: lockURL)
+        let before = LockHolders.reads
+        let firstLook = ReadOnlyFS.listFolder(reelsDir, relative: "Reels", detectProjects: false)!
+        check(firstLook.bins.first { $0.name == "Reel 1" }?.lockedBy == "EDIT-2", "the listing shows who has Reel 1 open")
+        check(firstLook.bins.first { $0.name == "Reel 2" }?.lockedBy == nil, "…and nobody for a free bin")
+        _ = ReadOnlyFS.listFolder(reelsDir, relative: "Reels", detectProjects: false)
+        _ = ReadOnlyFS.listFolder(reelsDir, relative: "Reels", detectProjects: false)
+        check(LockHolders.reads == before + 1, "a lock file is read once, not on every look (\(LockHolders.reads - before) reads)")
+        try Data("EDIT-9".utf8).write(to: lockURL)
+        try fm.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: lockURL.path)
+        check(ReadOnlyFS.listFolder(reelsDir, relative: "Reels", detectProjects: false)!.bins.first { $0.name == "Reel 1" }?.lockedBy == "EDIT-9",
+              "…and read again only when the lock file changes")
+        var holders: [UUID: String] = [:]
+        let lockedJob = ProbeJob(id: UUID(), directory: reelsDir, binFileName: "Reel 1.avb")
+        _ = ReadOnlyFS.probe([lockedJob], holders: &holders)
+        check(holders[lockedJob.id] == "EDIT-9", "watched bins report who has them open")
+        LockHolders.enabled = false
+        let readsWhenOff = LockHolders.reads
+        let off = ReadOnlyFS.listFolder(reelsDir, relative: "Reels", detectProjects: false)!
+        check(off.bins.first { $0.name == "Reel 1" }.map { $0.isLocked && $0.lockedBy == nil } == true && LockHolders.reads == readsWhenOff,
+              "turned off: still shows locked, but never opens the lock file")
+        LockHolders.enabled = true
+        try Data().write(to: lockURL)
+
+        print("Matching a lock to a Bin Watch user")
+        let samMac = Person(id: UUID(), name: "Sam Okafor", computer: "Sam's Mac Pro", hostName: "Sams-Mac-Pro.local")
+        check(samMac.matches(lockHolder: "SAMS-MAC-PRO"), "network name matches")
+        check(samMac.matches(lockHolder: "Sam's Mac Pro"), "computer name matches")
+        check(samMac.matches(lockHolder: "sam okafor"), "person's name matches")
+        check(!samMac.matches(lockHolder: "EDIT-2") && !samMac.matches(lockHolder: ""), "other names don't")
+
         print("Search index")
         let index = ReadOnlyFS.index(root.appendingPathComponent("Reels"), prefix: "Reels")!
         check(Set(index.bins.map(\.relativePath)) == ["Reels/Reel 1.avb", "Reels/Reel 2.avb", "Reels/Old/Café.avb"],

@@ -24,7 +24,8 @@ The build only needs Apple's Command Line Tools. Xcode isn't required.
    - **Selecting bins:** click a bin to select it, ⌘-click to add or remove one, ⇧-click to select a range, and ⌘A to select every bin in the folder. ↑/↓ move the selection and Esc clears it.
    - **Return:** toggles watching for the selection. If every selected bin is already watched, Return stops watching them; otherwise it watches them all. Folders still open with a single click.
    - **Opening a bin:** double-click a bin or script, or select it and press ⌘O (or ⌘↓). It opens in Media Composer if Avid is already running, or is shown in Finder if it isn't, just like **Show Bin** on alerts. Several selected items are shown together in Finder. Double-clicking a folder just opens the folder; it never opens a bin the second click happens to land on.
-4. Click **Watch** on the bins you're waiting for. The **Watching** page shows their live status and has a **Clear All** button, which asks for confirmation first.
+4. **Who has it open:** a locked bin shows who has it, e.g. "Locked by Sam Okafor". Bin Watch reads the name Avid writes inside the lock file, usually the computer's name. If that Mac belongs to a colleague who uses Bin Watch, it shows their name instead, or "you" for your own Mac. It appears in Browse, on the Watching page, in the menu bar and in Columns view's preview. **Ask…** then suggests that person automatically.
+5. Click **Watch** on the bins you're waiting for. The **Watching** page shows their live status and has a **Clear All** button, which asks for confirmation first.
 
 When a watched bin goes from locked to free:
 
@@ -64,7 +65,7 @@ Requests expire after 12 hours. Each person's Bin Watch only ever writes its own
 ## Read-only, guaranteed by macOS
 
 - **The monitored folder is read-only.** Bin Watch runs in the macOS App Sandbox and opens your monitored folder through a read-only bookmark, so macOS refuses any attempt to create, change, move or delete anything there. macOS's folder picker briefly grants write access to whatever you pick, so Bin Watch restarts itself right after you choose the folder. That way it never keeps that access.
-- **The code only lists folders.** All project access is in [Sources/ReadOnlyFS.swift](Sources/ReadOnlyFS.swift), and it only lists directory contents. It doesn't even open the `.lck` files. It only checks whether their names exist.
+- **The code only lists folders and reads lock names.** All project access is in [Sources/ReadOnlyFS.swift](Sources/ReadOnlyFS.swift). It lists folders and checks which files exist. To show who has a bin open, it also reads the first 1 KB of a `.lck` file, read-only, and closes it straight away. Each lock file is read only once, and again only if it changes. Turn off **Show who has a locked bin or script open** in Settings and Bin Watch never opens a `.lck` file at all; it only checks whether they exist.
 - **Writes only go to two places:**
   - **The request mailbox** ([Sources/Mailbox.swift](Sources/Mailbox.swift)). It can't be your monitored folder, contain it, or sit inside an Avid project. Every write goes through one guarded function that only accepts the mailbox's own subfolders.
   - **Bin Watch's private sound library** inside its sandbox container.

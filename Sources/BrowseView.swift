@@ -615,9 +615,10 @@ struct BinRow: View {
             }
             Spacer()
             if bin.isLocked {
-                Label("Locked", systemImage: "lock.fill")
+                LockedLabel(holder: bin.lockedBy)
                     .font(.caption).foregroundStyle(.orange)
-                AskButton(relativePath: bin.relativePath, name: bin.name, compact: true)
+                    .frame(maxWidth: 220, alignment: .trailing)
+                AskButton(relativePath: bin.relativePath, name: bin.name, holder: bin.lockedBy, compact: true)
             }
             WatchToggle(bin: bin)
         }
@@ -760,7 +761,7 @@ private struct BinTile: View {
         .onTapGesture { browser.click(bin.relativePath) }
         .onHover { hover = $0 }
         .contextMenu { BinContextMenu(bin: bin) }
-        .help(bin.isLocked ? "\(bin.name) — locked" : bin.name)
+        .help(bin.isLocked ? "\(bin.name) — locked" + (bin.lockedBy.map { " by \(RequestCenter.shared.describe(holder: $0))" } ?? "") : bin.name)
     }
 }
 
@@ -789,7 +790,7 @@ struct BinContextMenu: View {
             if let root = store.root { BinOpener.show([root.appendingPathComponent(bin.relativePath)]) }
         }
         if bin.isLocked {
-            Button(bin.isScript ? "Ask for This Script…" : "Ask for This Bin…") { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name) }
+            Button(bin.isScript ? "Ask for This Script…" : "Ask for This Bin…") { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name, holder: bin.lockedBy) }
         }
     }
 }
@@ -953,7 +954,7 @@ private struct FinderColumn: View {
         }
         .buttonStyle(.plain)
         .contextMenu { BinContextMenu(bin: bin) }
-        .help(bin.isLocked ? "\(bin.name) — locked" : bin.name)
+        .help(bin.isLocked ? "\(bin.name) — locked" + (bin.lockedBy.map { " by \(RequestCenter.shared.describe(holder: $0))" } ?? "") : bin.name)
     }
 }
 
@@ -982,11 +983,16 @@ private struct BinPreview: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             StatePill(state: state)
+            if state == .locked, let holder = bin.lockedBy ?? watched.flatMap({ store.holders[$0.id] }) {
+                LockedLabel(holder: holder).font(.callout).foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            }
             if state == .locked {
                 if let request = requests.openRequest(for: bin.relativePath) {
                     RequestStatusChip(request: request)
                 } else {
-                    Button { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name) } label: {
+                    Button { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name,
+                                                   holder: bin.lockedBy ?? watched.flatMap({ store.holders[$0.id] })) } label: {
                         Label(bin.isScript ? "Ask for This Script…" : "Ask for This Bin…", systemImage: "hand.raised").frame(minWidth: 130)
                     }
                     .controlSize(.large)
