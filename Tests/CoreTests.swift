@@ -92,6 +92,35 @@ func check(_ cond: Bool, _ msg: String) {
         check(samMac.matches(lockHolder: "sam okafor"), "person's name matches")
         check(!samMac.matches(lockHolder: "EDIT-2") && !samMac.matches(lockHolder: ""), "other names don't")
 
+        print("Locked page (everything open, by who has it)")
+        let cafeLock = root.appendingPathComponent("Reels/Old/" + "Café.lck".decomposedStringWithCanonicalMapping)
+        try Data("EDIT-2".utf8).write(to: lockURL)
+        try Data("ASSIST-4".utf8).write(to: cafeLock)
+        let openItems = ReadOnlyFS.lockedItems(under: root)!
+        check(openItems.map(\.relativePath) == ["Reels/Old/Café.avb", "Reels/Reel 1.avb"],
+              "finds every locked bin, in every subfolder, and nothing free: \(openItems.map(\.relativePath))")
+        check(openItems.map(\.lockedBy) == ["ASSIST-4", "EDIT-2"], "…with who has each one open")
+        check(ReadOnlyFS.lockedItems(under: root.appendingPathComponent("nope")) == nil, "unreachable folder → nil, not “nothing locked”")
+        let alexMac = Person(id: UUID(), name: "Alex", computer: "Alex's MacBook Pro", hostName: "Alexs-MacBook-Pro.local")
+        let samMac2 = Person(id: UUID(), name: "Sam", computer: "Edit 2", hostName: "EDIT-2.local")
+        func item(_ name: String, _ holder: String?) -> ScannedBin {
+            ScannedBin(relativePath: "Cuts/\(name).avb", name: name, folder: "Cuts", isLocked: true, lockedBy: holder)
+        }
+        let groups = LockedBins.group([item("Reel 1", "EDIT-2"), item("Reel 2", "edit-2.local"), item("Music", "ALEXS-MACBOOK-PRO"),
+                                       item("VFX", "ASSIST-4"), item("Titles", "assist-4"), item("Old", nil)],
+                                      me: alexMac, people: [samMac2])
+        check(groups.map(\.owner.name) == ["You", "ASSIST-4", "Sam", "Unknown"],
+              "grouped as you, then people and computers A–Z, then unknown: \(groups.map(\.owner.name))")
+        check(groups.first { $0.owner.name == "Sam" }?.items.map(\.name) == ["Reel 1", "Reel 2"],
+              "both spellings of Sam's Mac count as Sam")
+        check(groups.first { $0.owner.name == "ASSIST-4" }.map { $0.owner.kind == .computer && $0.items.count == 2 } == true,
+              "a Mac nobody's named is grouped by its computer name")
+        check(LockedBins.owner(of: "  ", me: alexMac, people: []) == .unknown, "a blank name counts as unknown")
+        check(LockedBins.matches(item("Café Scene", nil), search: "cafe") && LockedBins.matches(item("Reel 1", nil), search: "cuts")
+              && !LockedBins.matches(item("Reel 1", nil), search: "music"), "filtering matches names and folders, ignoring accents")
+        try Data().write(to: lockURL)
+        try Data().write(to: cafeLock)
+
         print("Search index")
         let index = ReadOnlyFS.index(root.appendingPathComponent("Reels"), prefix: "Reels")!
         check(Set(index.bins.map(\.relativePath)) == ["Reels/Reel 1.avb", "Reels/Reel 2.avb", "Reels/Old/Café.avb"],

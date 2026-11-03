@@ -220,6 +220,35 @@ enum ReadOnlyFS {
         return result
     }
 
+    /// Every locked bin and script beneath `root` (for the Locked page). The folders on each
+    /// level are listed in parallel, because on network storage each listing is a round trip.
+    /// Returns nil if the folder can't be read.
+    static func lockedItems(under root: URL, maxDepth: Int = 16) -> [ScannedBin]? {
+        let start = DispatchTime.now()
+        guard isReachable(root) else { return nil }
+        let lock = NSLock()
+        var found: [ScannedBin] = []
+        var level: [(dir: URL, relative: String)] = [(root, "")]
+        var depth = 0
+        var folders = 0
+        while !level.isEmpty && depth <= maxDepth {
+            var next: [(dir: URL, relative: String)] = []
+            DispatchQueue.concurrentPerform(iterations: level.count) { i in
+                let (dir, relative) = level[i]
+                guard let listing = listFolder(dir, relative: relative, detectProjects: false) else { return }
+                lock.lock()
+                found += listing.bins.filter(\.isLocked)
+                next += listing.folders.map { (dir.appendingPathComponent($0.name), $0.relativePath) }
+                lock.unlock()
+            }
+            folders += level.count
+            level = next
+            depth += 1
+        }
+        fsLog.debug("lockedItems: \(found.count) locked in \(folders) folders, \(elapsedMS(since: start))ms")
+        return found.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
+    }
+
     private static func walk(_ dir: URL, relative: String, depth: Int, maxDepth: Int, into result: inout FolderListing) {
         guard depth <= maxDepth,
               let listing = listFolder(dir, relative: relative, detectProjects: false) else { return }

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SidebarItem: Hashable {
-    case watching, browse, newBins, settings
+    case watching, locked, browse, newBins, settings
 }
 
 final class Navigation: ObservableObject {
@@ -56,6 +56,13 @@ struct ManageView: View {
                 .tag(SidebarItem.watching)
 
                 Label {
+                    Text("Locked")
+                } icon: {
+                    Image(systemName: "lock.fill").foregroundStyle(.orange)
+                }
+                .tag(SidebarItem.locked)
+
+                Label {
                     HStack {
                         Text("New Bins")
                         Spacer()
@@ -90,6 +97,7 @@ struct ManageView: View {
         case .watching: WatchingView()
         case .settings: SettingsView()
         case .newBins:  NewBinsView()
+        case .locked:   LockedView()
         default:        BrowseView()
         }
     }

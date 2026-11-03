@@ -16,7 +16,7 @@ The build only needs Apple's Command Line Tools. Xcode isn't required.
 
 1. Open Bin Watch from the Dock or Applications. Like Spotify, closing the window doesn't quit the app; it keeps monitoring. Click the Dock icon to bring the window back, and quit with ⌘Q.
 2. **Monitored folder:** choose one folder. It can be a single Avid project or a whole "Avid Projects" folder. To change it later, use **Change…** in the bottom of the sidebar or in Settings. Watched bins that are still inside the new folder stay watched.
-3. **Browse:** works like Finder. The sidebar order is Watching, New Bins, Browse, Settings.
+3. **Browse:** works like Finder. The sidebar order is Watching, Locked, New Bins, Browse, Settings.
    - **Views:** switch between Icons, List and Columns (⌘1 / ⌘2 / ⌘3). In Columns view, clicking a bin shows a preview with a big Watch button.
    - **Moving around:** click a folder to open it. Use the back and forward buttons (⌘[ and ⌘]) or ⌘↑ to go up a level, and click any part of the path bar to jump there.
    - **Type or paste a path:** click the empty part of the path bar, or press ⌘L or ⌘⇧G. Finder paths, paths from Terminal, `file://` links and Windows-style paths all work. A path that points at a bin selects that bin.
@@ -25,7 +25,8 @@ The build only needs Apple's Command Line Tools. Xcode isn't required.
    - **Return:** toggles watching for the selection. If every selected bin is already watched, Return stops watching them; otherwise it watches them all. Folders still open with a single click.
    - **Opening a bin:** double-click a bin or script, or select it and press ⌘O (or ⌘↓). It opens in Media Composer if Avid is already running, or is shown in Finder if it isn't, just like **Show Bin** on alerts. Several selected items are shown together in Finder. Double-clicking a folder just opens the folder; it never opens a bin the second click happens to land on.
 4. **Who has it open:** a locked bin shows who has it, e.g. "Locked by Sam Okafor". Bin Watch reads the name Avid writes inside the lock file, usually the computer's name. If that Mac belongs to a colleague who uses Bin Watch, it shows their name instead, or "you" for your own Mac. It appears in Browse, on the Watching page, in the menu bar and in Columns view's preview. **Ask…** then suggests that person automatically.
-5. Click **Watch** on the bins you're waiting for. The **Watching** page shows their live status and has a **Clear All** button, which asks for confirmation first.
+5. **Locked:** lists every bin and script that's open anywhere in the monitored folder, grouped by who has it. Click a person (or computer) at the top, or on a group's heading, to see only what they have open, e.g. everything Jack has locked. Type in **Filter by name** to narrow it further. **Watch All** watches everything in a group, so you're alerted as each one frees up. Each row also has **Ask…** and **Watch**, and double-clicking opens it just like in Browse. The list is checked every 15 seconds, but only while the page is open, because listing a whole project tree is far more work than checking a few watched bins.
+6. Click **Watch** on the bins you're waiting for. The **Watching** page shows their live status and has a **Clear All** button, which asks for confirmation first.
 
 When a watched bin goes from locked to free:
 

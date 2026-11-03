@@ -54,7 +54,17 @@ func snapshot(_ out: String) {
     let host = window.contentView!
     let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
     host.cacheDisplay(in: host.bounds, to: rep)
-    try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out))
+    // Paint the window's background behind the view, as the screen would.
+    let flat = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: rep.pixelsWide, pixelsHigh: rep.pixelsHigh,
+                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: flat)
+    let bounds = NSRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh)
+    window.backgroundColor.setFill(); bounds.fill()
+    rep.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: nil)
+    NSGraphicsContext.restoreGraphicsState()
+    try! flat.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out))
 }
 
 @main enum Harness {
@@ -104,6 +114,7 @@ func snapshot(_ out: String) {
         BinOpener.testHook = { _ in }       // never open Avid or Finder from tests
         RequestFlowTests.run(store, dir: dir)
         NewBinsFlowTests.run(store, dir: dir)
+        LockedFlowTests.run(store, dir: dir)
         check(AlertCenter.shared.chimesSuppressed > 0, "alerts were raised during the tests, but no sound was played")
         print(fails == 0 ? "interaction tests passed" : "\(fails) interaction tests FAILED")
         exit(fails == 0 ? 0 : 1)
