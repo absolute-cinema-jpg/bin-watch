@@ -258,6 +258,64 @@ func check(_ cond: Bool, _ msg: String) {
         alexBox.cleanUp(now: Date().addingTimeInterval(2 * 3600))
         check(alexBox.requests(now: Date()).isEmpty, "Alex tidies up his finished and expired requests")
         check(alexBox.replies(to: [request.id]).count == 1, "…but never touches Sam's files")
+
+        print("Mailbox — awkward storage")
+        // Storage that refuses to rename over an existing file.
+        let pickyBox = MailboxClient(folder: box, me: alex)
+        pickyBox.renameFile = { from, to in
+            if FileManager.default.fileExists(atPath: to) { errno = EEXIST; return -1 }
+            return rename(from, to)
+        }
+        let earlier = Date().addingTimeInterval(-600), later = Date().addingTimeInterval(-60)
+        try pickyBox.publishPresence(now: earlier)
+        try pickyBox.publishPresence(now: later)
+        let alexSeen = samBox.people().first { $0.person.id == alex.id }?.lastSeen
+        check(alexSeen.map { abs($0.timeIntervalSince(later)) < 1 } == true && pickyBox.replaceNeededWorkaround,
+              "presence still updates on storage that won't rename over a file")
+        let pickyCheck = pickyBox.runCheck()
+        check(pickyCheck.problem == nil && pickyCheck.usedReplaceWorkaround, "…and the connection check passes, and notes it")
+        check(!fm.fileExists(atPath: box.appendingPathComponent("check-\(alex.id.uuidString).json").path), "…and removes its test file")
+        // Storage that refuses every rename: it must fail loudly, not pretend.
+        let brokenBox = MailboxClient(folder: box, me: alex)
+        brokenBox.renameFile = { _, _ in errno = EACCES; return -1 }
+        check((try? brokenBox.publishPresence()) == nil, "a write that fails reports failure")
+        check(brokenBox.runCheck().problem != nil, "…and the connection check says so")
+        let hidden = (fm.enumerator(atPath: box.path)?.allObjects as? [String] ?? []).filter { ($0 as NSString).lastPathComponent.hasPrefix(".tmp-") }
+        check(hidden.isEmpty, "…with no temp files left behind: \(hidden)")
+        // A stale heartbeat stays stale, however new the file's date looks.
+        try alexBox.publishPresence(now: Date().addingTimeInterval(-7 * 86400))
+        let week = samBox.people().first { $0.person.id == alex.id }?.lastSeen
+        check(week.map { Date().timeIntervalSince($0) > 6 * 86400 } == true, "last seen comes from the person's own clock, not the server's file date")
+        try alexBox.publishPresence(now: Date().addingTimeInterval(3600))
+        check(samBox.people().first { $0.person.id == alex.id }.map { $0.lastSeen <= Date() } == true, "a clock in the future can't look like more than “now”")
+        try alexBox.publishPresence()
+        // Older versions wrote just the person, with no heartbeat.
+        let oldTimer = Person(id: UUID(), name: "Pat", computer: "Edit 3")
+        try JSONEncoder().encode(oldTimer).write(to: box.appendingPathComponent("people/\(oldTimer.id.uuidString).json"))
+        check(samBox.people().first { $0.person.id == oldTimer.id }.map { Date().timeIntervalSince($0.lastSeen) < 60 } == true, "colleagues on an older version still show as online")
+        try fm.removeItem(at: box.appendingPathComponent("people/\(oldTimer.id.uuidString).json"))
+        // Someone who reinstalled has a new ID: their old self mustn't linger as a second person.
+        let samBefore = MailboxClient(folder: box, me: Person(id: UUID(), name: "Jo", computer: "Edit 4"))
+        let samAfter = MailboxClient(folder: box, me: Person(id: UUID(), name: "Jo", computer: "Edit 4"))
+        try samBefore.publishPresence(now: Date().addingTimeInterval(-7 * 86400))
+        try samAfter.publishPresence()
+        let jos = alexBox.people().filter { $0.person.name == "Jo" }
+        check(jos.map(\.person.id) == [samAfter.me.id], "someone who reinstalled appears once, as their newest self")
+        for jo in [samBefore, samAfter] { try fm.removeItem(at: box.appendingPathComponent("people/\(jo.me.id.uuidString).json")) }
+        // Requests: can't-look and can't-read are different from gone.
+        let absentBox = MailboxClient(folder: shared.appendingPathComponent("Not There"), me: alex)
+        check(absentBox.listRequests() == nil && absentBox.listPeople() == nil, "a mailbox that can't be read gives “don't know”, not “nothing”")
+        check(absentBox.checkAccess() == .unavailable, "…and counts as unavailable")
+        check(alexBox.checkAccess() == .ok, "a good mailbox counts as ok")
+        check(MailboxClient.isPermissionError(NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileReadNoPermission.rawValue))
+              && MailboxClient.isPermissionError(NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)))
+              && !MailboxClient.isPermissionError(NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileReadNoSuchFile.rawValue)),
+              "macOS refusing access is told apart from a missing folder")
+        let corruptID = UUID()
+        try Data("{ half a fi".utf8).write(to: box.appendingPathComponent("requests/\(corruptID.uuidString).json"))
+        check(samBox.listRequests()?.unreadable == [corruptID], "a request file that can't be read is noted, not treated as gone")
+        try fm.removeItem(at: box.appendingPathComponent("requests/\(corruptID.uuidString).json"))
+
         let written = Set((fm.enumerator(atPath: box.path)?.allObjects as? [String]) ?? [])
         check(written.allSatisfy { $0 == "About this folder.txt" || ["people", "requests", "replies"].contains($0.components(separatedBy: "/")[0]) },
               "everything written stays in the mailbox's own subfolders")

@@ -13,8 +13,20 @@ final class RequestCenter: ObservableObject {
         var isOnline: Bool { Date().timeIntervalSince(lastSeen) < MailboxClient.onlineWindow }
     }
 
+    enum MailboxStatus: Equatable {
+        case off                 // no mailbox chosen
+        case connecting
+        case connected
+        case waitingForStorage   // the storage isn't there yet: keeps trying by itself
+        case needsPermission     // the storage is there, but macOS won't let us in
+    }
+
     @Published private(set) var mailboxPath: String? { didSet { defaults.set(mailboxPath, forKey: "mailboxPath") } }
-    @Published private(set) var mailboxOnline: Bool?
+    @Published private(set) var status: MailboxStatus = .off
+    /// My open requests that are confirmed to be in the mailbox.
+    @Published private(set) var delivered: Set<UUID> = []
+    @Published private(set) var lastCheck: MailboxClient.CheckResult?
+    @Published private(set) var checking = false
     @Published private(set) var people: [PersonStatus] = []
     /// My requests, newest first, with everyone's replies.
     @Published private(set) var outgoing: [BinRequest] = []
@@ -32,11 +44,33 @@ final class RequestCenter: ObservableObject {
     private var mailboxBookmark: Data? { didSet { defaults.set(mailboxBookmark, forKey: "mailboxBookmark") } }
     private var mailboxURL: URL?
     private var client: MailboxClient?
-    private let queue = DispatchQueue(label: "binwatch.mailbox", qos: .utility)
+    private var queue = DispatchQueue(label: "binwatch.mailbox", qos: .utility)
     private var timer: Timer?
     private var polling = false
+    private var pollStarted = Date.distantPast
+    private var pollAgain = false
+    private var connecting = false
+    private var connectAgain = false
+    /// Bumped when a stuck network call is abandoned, so its late answer is ignored.
+    private var generation = 0
+    private var lastConnectAttempt = Date.distantPast
+    private var failingSince: Date?
     private var lastPresence = Date.distantPast
     private var lastCleanUp = Date.distantPast
+    private var problemCard: UUID?
+    private var problemCardDismissed = false
+
+    /// Replies waiting to be written (a later answer replaces an earlier one).
+    private var unsentReplies: [UUID: RequestReply] = [:]
+    /// How many looks in a row a request's card has found its file gone.
+    private var missingLooks: [UUID: Int] = [:]
+
+    static let retryInterval: TimeInterval = 10
+    /// A call to the storage that takes longer than this is treated as stuck.
+    static let stuckAfter: TimeInterval = 90
+    /// How long the storage must be there, yet refuse us, before asking for the folder again.
+    /// It can take a moment after mounting, and asking is an interruption.
+    static var permissionGrace: TimeInterval = 30
 
     /// Incoming requests I've answered or dismissed (so they don't pop up again).
     private var handled: [UUID: Date] = [:] { didSet { saveHandled() } }
@@ -63,7 +97,24 @@ final class RequestCenter: ObservableObject {
         if me.matches(lockHolder: holder) { return "you" }
         return person(holding: holder)?.person.name ?? holder
     }
-    var isSetUp: Bool { client != nil }
+
+    /// A mailbox has been chosen. It may not be connected right now: see `status`.
+    var isSetUp: Bool { mailboxBookmark != nil }
+    var mailboxName: String { mailboxPath.map { ($0 as NSString).lastPathComponent } ?? "the mailbox" }
+
+    /// What's wrong, in words, or nil when all is well.
+    var statusMessage: String? {
+        switch status {
+        case .off, .connected: return nil
+        case .connecting: return "Connecting to the mailbox…"
+        case .waitingForStorage:
+            let parts = (mailboxPath ?? "").split(separator: "/")
+            let storage = parts.first == "Volumes" && parts.count > 1 ? "“\(parts[1])”" : "The mailbox folder"
+            return "\(storage) isn't connected. Bin Watch will reconnect by itself and send anything waiting."
+        case .needsPermission:
+            return "macOS needs you to choose “\(mailboxName)” again before Bin Watch can use it."
+        }
+    }
 
     private init() {
         if let saved = defaults.string(forKey: "myID").flatMap(UUID.init(uuidString:)) {
@@ -83,6 +134,18 @@ final class RequestCenter: ObservableObject {
         t.tolerance = 0.5
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        // Network volumes often mount after login items start, and drop during sleep.
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didWakeNotification] {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.retryNow() }
+        }
+    }
+
+    /// Look again straight away, rather than at the next retry.
+    func retryNow() {
+        lastConnectAttempt = .distantPast
+        lastPresence = .distantPast
+        poll()
     }
 
     // MARK: Mailbox folder
@@ -95,7 +158,8 @@ final class RequestCenter: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.directoryURL = mailboxURL ?? AppStore.shared.root?.deletingLastPathComponent() ?? URL(fileURLWithPath: "/Volumes")
+        panel.directoryURL = mailboxURL ?? mailboxPath.map { URL(fileURLWithPath: $0) }
+            ?? AppStore.shared.root?.deletingLastPathComponent() ?? URL(fileURLWithPath: "/Volumes")
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -119,51 +183,177 @@ final class RequestCenter: ObservableObject {
         else { return false }
         mailboxBookmark = bookmark
         mailboxPath = url.path
+        failingSince = nil
+        problemCardDismissed = false
         reconnect()
         return true
     }
 
     func turnOff() {
         for request in outgoing where request.status == .open { setStatus(.cancelled, of: request.id) }
+        if let client {
+            let closing = outgoing
+            queue.async { for request in closing { try? client.post(request) } }
+        }
         mailboxURL?.stopAccessingSecurityScopedResource()
         mailboxURL = nil
         client = nil
         mailboxBookmark = nil
         mailboxPath = nil
-        mailboxOnline = nil
+        failingSince = nil
+        status = .off
         people = []
+        delivered = []
+        lastCheck = nil
+        updateProblemCard()
     }
 
+    /// Opens the saved mailbox, on the background queue because the storage can be slow or
+    /// absent. A failure is never final: `poll` keeps calling this until it works, and the
+    /// chosen folder is only ever forgotten if you turn it off.
     private func reconnect() {
-        guard let bookmark = mailboxBookmark else { client = nil; return }
-        var stale = false
-        guard let url = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI, .withoutMounting],
-                                 relativeTo: nil, bookmarkDataIsStale: &stale)
-        else { mailboxOnline = false; client = nil; return }
-        if mailboxURL != url {
-            mailboxURL?.stopAccessingSecurityScopedResource()
-            _ = url.startAccessingSecurityScopedResource()
+        guard let bookmark = mailboxBookmark else {
+            client = nil
+            if status != .off { status = .off }
+            return
+        }
+        guard !connecting else { connectAgain = true; return }
+        connecting = true
+        lastConnectAttempt = Date()
+        if status == .off { status = .connecting }
+        let person = me, old = mailboxURL, savedPath = mailboxPath ?? "", started = generation
+
+        queue.async { [weak self] in
+            var stale = false
+            var url: URL?
+            do {
+                url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI, .withoutMounting],
+                              relativeTo: nil, bookmarkDataIsStale: &stale)
+            } catch {
+                mailLog.notice("couldn't open the saved mailbox: \((error as NSError).domain, privacy: .public) \((error as NSError).code)")
+            }
+            var fresh: Data?
+            var client: MailboxClient?
+            var access = MailboxClient.Access.unavailable
+            var check: MailboxClient.CheckResult?
+            if let url {
+                // Always ask again: access granted before a volume dropped may no longer work.
+                old?.stopAccessingSecurityScopedResource()
+                _ = url.startAccessingSecurityScopedResource()
+                if stale { fresh = try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil) }
+                let opened = MailboxClient(folder: url, me: person)
+                try? opened.setUp()
+                access = opened.checkAccess()
+                if access == .ok {
+                    client = opened
+                    check = opened.runCheck()
+                }
+            }
+            let mounted = Self.volumeIsMounted(for: url?.path ?? savedPath)
+            DispatchQueue.main.async {
+                guard let self, started == self.generation else { return }
+                self.finishConnecting(bookmark: bookmark, url: url, fresh: fresh, client: client,
+                                      access: access, mounted: mounted, check: check)
+            }
+        }
+    }
+
+    private func finishConnecting(bookmark: Data, url: URL?, fresh: Data?, client: MailboxClient?,
+                                  access: MailboxClient.Access, mounted: Bool, check: MailboxClient.CheckResult?) {
+        connecting = false
+        defer {
+            if connectAgain { connectAgain = false; reconnect() }
+        }
+        // Turned off, or a different folder chosen, while this was under way.
+        guard mailboxBookmark == bookmark else {
+            url?.stopAccessingSecurityScopedResource()
+            return
+        }
+        if let url {
             mailboxURL = url
+            if mailboxPath != url.path { mailboxPath = url.path }
         }
-        if mailboxPath != url.path { mailboxPath = url.path }
-        if stale, let fresh = try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil) {
-            mailboxBookmark = fresh
+        if let fresh { mailboxBookmark = fresh }
+        if let client, !connectAgain {
+            self.client = client
+            failingSince = nil
+            lastCheck = check
+            lastPresence = .distantPast
+            setStatus(.connected)
+            poll()
+        } else if client == nil {
+            connectionFailed(access: access, mounted: mounted)
         }
-        let client = MailboxClient(folder: url, me: me)
-        self.client = client
-        lastPresence = .distantPast
-        queue.async {
-            try? client.setUp()
-            try? client.publishPresence()
+    }
+
+    private func connectionFailed(access: MailboxClient.Access, mounted: Bool) {
+        client = nil
+        let since = failingSince ?? Date()
+        failingSince = since
+        let refused = access == .denied || mounted
+        setStatus(refused && Date().timeIntervalSince(since) >= Self.permissionGrace ? .needsPermission : .waitingForStorage)
+    }
+
+    private func setStatus(_ new: MailboxStatus) {
+        if status != new {
+            mailLog.notice("mailbox status: \(String(describing: new), privacy: .public)")
+            status = new
         }
-        poll()
+        updateProblemCard()
+    }
+
+    /// Losing access is the one problem Bin Watch can't fix alone, and until it's fixed
+    /// colleagues' requests can't reach you, so it says so rather than waiting to be noticed.
+    private func updateProblemCard() {
+        if status == .needsPermission {
+            guard problemCard == nil, !problemCardDismissed else { return }
+            let id = UUID()
+            problemCard = id
+            AlertCenter.shared.present(
+                AlertItem(id: id, kind: .mailboxProblem, title: "Bin requests aren't connected",
+                          detail: "Choose “\(mailboxName)” again so requests can reach you.", time: Date()),
+                onRespond: { [weak self] response in
+                    self?.problemCard = nil
+                    self?.problemCardDismissed = true
+                    if response == .primary {
+                        DispatchQueue.main.async { self?.chooseMailboxViaPanel() }
+                    }
+                })
+        } else if let id = problemCard {
+            problemCard = nil
+            AlertCenter.shared.remove(id)
+        }
+    }
+
+    static func volumeIsMounted(for path: String) -> Bool {
+        let parts = path.split(separator: "/")
+        guard parts.first == "Volumes", parts.count > 1 else { return true }
+        let volume = "/Volumes/\(parts[1])"
+        return (FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil, options: []) ?? [])
+            .contains { $0.path == volume }
+    }
+
+    /// "Check Connection" in Settings.
+    func checkConnection() {
+        guard let client else {
+            retryNow()
+            return
+        }
+        checking = true
+        queue.async { [weak self] in
+            let result = client.runCheck()
+            DispatchQueue.main.async {
+                self?.checking = false
+                self?.lastCheck = result
+            }
+        }
     }
 
     // MARK: Asking
 
     /// Ask someone (or everyone) to close a bin. The bin is watched too, so you're alerted when it frees up.
+    /// If the mailbox can't be reached right now, it's sent as soon as it can be.
     func ask(binPath: String, binName: String, to recipient: UUID?, message: String) {
-        guard let client else { return }
         AppStore.shared.ensureWatched(relativePath: binPath)
         let folder = (binPath as NSString).deletingLastPathComponent
         let request = BinRequest(
@@ -176,7 +366,7 @@ final class RequestCenter: ObservableObject {
         for old in outgoing where old.binPath == binPath && old.status == .open { setStatus(.cancelled, of: old.id) }
         outgoing.insert(request, at: 0)
         saveOutgoing()
-        queue.async { try? client.post(request) }
+        poll()
     }
 
     func openRequest(for binPath: String) -> BinRequest? {
@@ -200,9 +390,8 @@ final class RequestCenter: ObservableObject {
     private func setStatus(_ status: BinRequest.Status, of id: UUID) {
         guard let i = outgoing.firstIndex(where: { $0.id == id }) else { return }
         outgoing[i].status = status
-        let updated = outgoing[i]
         saveOutgoing()
-        if let client { queue.async { try? client.post(updated) } }
+        poll()
     }
 
     func name(of personID: UUID?) -> String {
@@ -213,42 +402,129 @@ final class RequestCenter: ObservableObject {
     // MARK: Polling
 
     private func poll() {
-        guard let client, !polling else { return }
-        polling = true
         let now = Date()
+        // A call to unresponsive storage can hang. Don't let it stop everything for good.
+        if (polling && now.timeIntervalSince(pollStarted) > Self.stuckAfter)
+            || (connecting && now.timeIntervalSince(lastConnectAttempt) > Self.stuckAfter) {
+            mailLog.error("mailbox call stuck; starting over")
+            generation += 1
+            queue = DispatchQueue(label: "binwatch.mailbox", qos: .utility)
+            polling = false
+            connecting = false
+            client = nil
+            setStatus(.waitingForStorage)
+        }
+        guard !polling else { pollAgain = true; return }
+        guard let client else {
+            if isSetUp, now.timeIntervalSince(lastConnectAttempt) >= Self.retryInterval { reconnect() }
+            return
+        }
+        polling = true
+        pollStarted = now
         let needsPresence = now.timeIntervalSince(lastPresence) > 60
         let needsCleanUp = now.timeIntervalSince(lastCleanUp) > 600
-        if needsPresence { lastPresence = now }
         if needsCleanUp { lastCleanUp = now }
         let mine = Set(outgoing.filter { $0.status == .open }.map(\.id))
+        let current = outgoing.filter { now.timeIntervalSince($0.created) < MailboxClient.requestLifetime }
+        let unsent = Array(unsentReplies.values)
+        let started = generation
 
         queue.async { [weak self] in
-            let online = client.isReachable
-            if online && needsPresence { try? client.publishPresence() }
-            if online && needsCleanUp { client.cleanUp() }
-            let people = online ? client.people() : []
-            let requests = online ? client.requests() : []
-            let replies = online ? client.replies(to: mine) : []
+            let access = client.checkAccess()
+            var presenceWritten = false
+            var people: [(person: Person, lastSeen: Date)]?
+            var listing: MailboxClient.RequestListing?
+            var confirmed = Set<UUID>()
+            var sent: [RequestReply] = []
+            var replies: [RequestReply] = []
+            if access == .ok {
+                if needsPresence {
+                    do {
+                        try client.publishPresence()
+                        presenceWritten = true
+                    } catch {
+                        mailLog.error("couldn't update presence: \(error.localizedDescription, privacy: .public)")
+                    }
+                }
+                if needsCleanUp { client.cleanUp() }
+                people = client.listPeople()
+                listing = client.listRequests()
+                // The mailbox should match what I know about my requests. Anything that
+                // didn't get there, or changed since, is written again.
+                if let listing {
+                    let listed = Dictionary(listing.requests.map { ($0.id, $0.status) }, uniquingKeysWith: { a, _ in a })
+                    for request in current where request.status == .open || listed[request.id] != nil {
+                        if listed[request.id] == request.status {
+                            if request.status == .open { confirmed.insert(request.id) }
+                            continue
+                        }
+                        do {
+                            try client.post(request)
+                            if request.status == .open { confirmed.insert(request.id) }
+                        } catch {
+                            mailLog.error("couldn't post a request: \(error.localizedDescription, privacy: .public)")
+                        }
+                    }
+                }
+                for reply in unsent where (try? client.send(reply)) != nil { sent.append(reply) }
+                replies = client.replies(to: mine)
+            }
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, started == self.generation else { return }
                 self.polling = false
+                defer {
+                    if self.pollAgain { self.pollAgain = false; self.poll() }
+                }
                 guard self.client === client else { return }
-                if self.mailboxOnline != online { self.mailboxOnline = online }
-                guard online else { return }
-                let statuses = people.map { PersonStatus(person: $0.person, lastSeen: $0.lastSeen) }
-                    .sorted { ($0.isOnline ? 0 : 1, $0.person.name) < ($1.isOnline ? 0 : 1, $1.person.name) }
-                if self.people != statuses { self.people = statuses }
-                self.handleIncoming(requests)
+                guard access == .ok else {
+                    mailLog.notice("lost the mailbox: \(String(describing: access), privacy: .public)")
+                    self.connectionFailed(access: access, mounted: Self.volumeIsMounted(for: client.folder.path))
+                    self.lastConnectAttempt = .distantPast
+                    return
+                }
+                if presenceWritten { self.lastPresence = now } else if needsPresence { self.lastPresence = now.addingTimeInterval(-45) }
+                for reply in sent where self.unsentReplies[reply.requestID] == reply { self.unsentReplies[reply.requestID] = nil }
+                self.expireOldRequests()
+                if let people {
+                    let statuses = people.map { PersonStatus(person: $0.person, lastSeen: $0.lastSeen) }
+                        .sorted { ($0.isOnline ? 0 : 1, $0.person.name) < ($1.isOnline ? 0 : 1, $1.person.name) }
+                    if self.people != statuses { self.people = statuses }
+                }
+                if listing != nil, self.delivered != confirmed { self.delivered = confirmed }
+                self.handleIncoming(listing)
                 self.handleReplies(replies)
             }
         }
     }
 
-    private func handleIncoming(_ requests: [BinRequest]) {
+    /// My requests stop counting after 12 hours, like everyone else's view of them.
+    private func expireOldRequests() {
+        let now = Date()
+        let isOld: (BinRequest) -> Bool = { now.timeIntervalSince($0.created) >= MailboxClient.requestLifetime }
+        guard outgoing.contains(where: isOld) else { return }
+        outgoing.removeAll(where: isOld)
+        saveOutgoing()
+    }
+
+    private func handleIncoming(_ listing: MailboxClient.RequestListing?) {
+        // Couldn't look just now: that says nothing about the requests, so change nothing.
+        guard let listing else { return }
+        let requests = listing.requests
         let byID = Dictionary(requests.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
-        // Take down cards for requests that were resolved, cancelled or have expired.
-        for (requestID, cardID) in requestCards where byID[requestID]?.status != .open {
+        // Take down cards for requests that were resolved, cancelled or have expired. A file
+        // that's unreadable, or missing for a single look, may just be mid-update.
+        for (requestID, cardID) in requestCards {
+            if let request = byID[requestID] {
+                missingLooks[requestID] = nil
+                if request.status == .open { continue }
+            } else {
+                if listing.unreadable.contains(requestID) { continue }
+                let looks = (missingLooks[requestID] ?? 0) + 1
+                missingLooks[requestID] = looks
+                if looks < 2 { continue }
+            }
+            missingLooks[requestID] = nil
             AlertCenter.shared.remove(cardID)
             requestCards[requestID] = nil
             handled[requestID] = Date()
@@ -286,9 +562,8 @@ final class RequestCenter: ObservableObject {
     }
 
     private func reply(to request: BinRequest, _ answer: RequestReply.Answer) {
-        guard let client else { return }
-        let reply = RequestReply(requestID: request.id, from: me, answer: answer, at: Date())
-        queue.async { try? client.send(reply) }
+        unsentReplies[request.id] = RequestReply(requestID: request.id, from: me, answer: answer, at: Date())
+        poll()
     }
 
     private func handleReplies(_ incoming: [RequestReply]) {

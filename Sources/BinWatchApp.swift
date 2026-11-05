@@ -23,8 +23,14 @@ struct BinWatchApp: App {
 
 /// Behaves like Spotify: a normal Dock app whose window you can close while it keeps working.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Keeps macOS from napping Bin Watch while its window is closed or behind Avid, which
+    /// would hold back its checks by minutes. The Mac can still go to sleep as usual.
+    private var keepChecking: NSObjectProtocol?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        keepChecking = ProcessInfo.processInfo.beginActivity(
+            options: .userInitiatedAllowingIdleSystemSleep, reason: "Monitoring Avid bins")
         _ = AppStore.shared
         _ = RequestCenter.shared
         _ = NewBinWatcher.shared

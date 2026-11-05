@@ -7,6 +7,7 @@ struct AlertItem: Identifiable, Equatable {
         case request(everyone: Bool)       // someone asks me to close a bin
         case reply(positive: Bool)         // someone answered my request
         case newBins(count: Int)           // bins appeared in a folder I'm watching
+        case mailboxProblem                // Bin Watch needs the mailbox folder chosen again
     }
 
     let id: UUID

@@ -84,9 +84,9 @@ struct AskSheet: View {
                 Label("Nobody else has joined this mailbox yet. Your request will wait up to 12 hours.",
                       systemImage: "info.circle")
                     .font(.caption).foregroundStyle(.secondary)
-            } else if requests.mailboxOnline == false {
-                Label("The mailbox folder isn't reachable right now.", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.orange)
+            }
+            if let problem = requests.statusMessage, requests.status != .connecting {
+                MailboxProblemLabel(message: problem)
             }
 
             HStack {
@@ -122,6 +122,25 @@ struct AskSheet: View {
     }
 }
 
+/// Says what's wrong with the mailbox, with a way to fix it if it needs you.
+struct MailboxProblemLabel: View {
+    let message: String
+    @ObservedObject private var requests = RequestCenter.shared
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            if requests.status == .needsPermission {
+                Spacer(minLength: 0)
+                Button("Choose Folder…") { requests.chooseMailboxViaPanel() }
+                    .controlSize(.small)
+            }
+        }
+    }
+}
+
 /// Shown on a watched bin you've asked for: who you asked and what they said.
 struct RequestStatusChip: View {
     let request: BinRequest
@@ -140,26 +159,47 @@ struct RequestStatusChip: View {
             .help("Cancel this request")
         }
         .font(.caption.weight(.medium))
-        .foregroundStyle(requestPurple)
+        .foregroundStyle(tint)
         .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(requestPurple.opacity(0.14), in: Capsule())
+        .background(tint.opacity(0.14), in: Capsule())
         .help(detail)
     }
 
     private var replies: [RequestReply] { requests.replies[request.id] ?? [] }
+    private var isSent: Bool { requests.delivered.contains(request.id) }
+    private var nobodyToSeeIt: Bool { replies.isEmpty && isSent && !recipientIsOnline }
+    private var tint: Color { !isSent || nobodyToSeeIt ? .orange : requestPurple }
+
+    /// Is anyone who'd get this request running Bin Watch right now?
+    private var recipientIsOnline: Bool {
+        if let to = request.to { return requests.people.first { $0.id == to }?.isOnline ?? false }
+        return requests.people.contains(where: \.isOnline)
+    }
 
     private var summary: String {
+        if !isSent { return "Not sent yet" }
         if let closing = replies.first(where: { $0.answer == .closing }) { return "\(closing.from.name) is closing it" }
         if let notNow = replies.first(where: { $0.answer == .notNow }) { return "\(notNow.from.name): not yet" }
         let seen = replies.filter { $0.answer != .notMe }
         if request.isForEveryone {
-            return seen.isEmpty ? "Asked everyone" : "Asked everyone · seen by \(seen.count)"
+            if seen.isEmpty { return nobodyToSeeIt ? "Asked everyone · nobody online" : "Asked everyone" }
+            return "Asked everyone · seen by \(seen.count)"
         }
-        return seen.isEmpty ? "Asked \(requests.name(of: request.to))" : "Seen by \(requests.name(of: request.to))"
+        let name = requests.name(of: request.to)
+        if seen.isEmpty { return nobodyToSeeIt ? "Asked \(name) · offline" : "Asked \(name)" }
+        return "Seen by \(name)"
     }
 
     private var detail: String {
         var lines = ["Asked \(request.isForEveryone ? "everyone" : requests.name(of: request.to)) at \(request.created.formatted(date: .omitted, time: .shortened))"]
+        if !isSent {
+            lines.append(requests.statusMessage ?? "Sending…")
+            lines.append("It will be sent automatically as soon as the mailbox can be reached.")
+        } else if replies.isEmpty {
+            lines.append(recipientIsOnline
+                ? "It's in the mailbox. “Seen” appears once it's on their screen."
+                : "It's in the mailbox, and will appear on their screen when their Bin Watch next connects (within 12 hours).")
+        }
         for reply in replies {
             let answer: String
             switch reply.answer {
@@ -225,9 +265,31 @@ struct BinRequestsSettings: View {
                     Button("Turn Off") { requests.turnOff() }
                 }
             }
-            if requests.mailboxOnline == false {
-                Label("The mailbox folder isn't reachable right now.", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.orange)
+            if let problem = requests.statusMessage {
+                MailboxProblemLabel(message: problem)
+            } else if requests.status == .connected {
+                Label("Connected", systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(.green)
+            }
+            if requests.isSetUp {
+                HStack(spacing: 8) {
+                    Button("Check Connection") { requests.checkConnection() }
+                        .controlSize(.small)
+                        .disabled(requests.checking)
+                        .help("Tries listing, writing and reading a small test file in the mailbox, then removes it")
+                    if requests.checking {
+                        ProgressView().controlSize(.small)
+                    } else if let check = requests.lastCheck {
+                        Group {
+                            if let problem = check.problem {
+                                Label(problem, systemImage: "xmark.circle.fill").foregroundStyle(.orange)
+                            } else {
+                                Label("Sending and receiving works", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(.caption)
+                    }
+                }
             }
 
             if requests.isSetUp {

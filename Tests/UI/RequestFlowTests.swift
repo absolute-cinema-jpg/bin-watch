@@ -71,6 +71,28 @@ enum RequestFlowTests {
         check(scriptCard?.noun == "script", "a request for a script is labelled as a script request")
         if let scriptCard { AlertCenter.shared.respond(scriptCard.id, .dismissed) }
 
+        print("Bin requests — a network blip")
+        let blipAsk = BinRequest(id: UUID(), from: sam, to: requests.me.id, binName: "Stringouts", binLocation: "Documentary S1",
+                                 binPath: "Documentary S1/Stringouts.avb", message: nil, created: Date(), status: .open)
+        try! samBox.post(blipAsk)
+        pump(4)
+        let onScreen: () -> Bool = { alerts.items.contains { $0.title == "Sam would like “Stringouts”" } }
+        check(onScreen(), "a request is on your screen")
+        let requestsPath = box.appendingPathComponent("requests").path
+        try! fm.setAttributes([.posixPermissions: 0], ofItemAtPath: requestsPath)      // the listing fails for a while
+        pump(7)
+        check(requests.status != .connected, "Bin Watch notices the mailbox can't be read: \(requests.status)")
+        check(onScreen(), "the request stays on screen meanwhile")
+        try! fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: requestsPath)
+        requests.retryNow()
+        pump(7)
+        check(requests.status == .connected, "it reconnects once it can read again")
+        check(onScreen(), "…and the request is still there, not lost")
+        var blipDone = blipAsk; blipDone.status = .cancelled
+        try! samBox.post(blipDone)
+        pump(4)
+        check(!onScreen(), "it only goes when Sam actually cancels it")
+
         print("Bin requests — you ask Sam")
         check(fm.fileExists(atPath: lock.path), "Reel 2 is locked")
         requests.ask(binPath: reel2, binName: "Reel 2", to: sam.id, message: "Trailer conform")
@@ -97,6 +119,55 @@ enum RequestFlowTests {
         pump(0.5)
         check(!store.isWatched(reel2), "“Dismiss” stops watching")
         fm.createFile(atPath: lock.path, contents: Data())
+
+        print("Bin requests — the storage isn't there (as at login, before it has mounted)")
+        let path = requests.mailboxPath
+        try! fm.removeItem(at: box)
+        requests.retryNow()
+        pump(4)
+        requests.retryNow()
+        pump(2)
+        check(requests.status == .waitingForStorage, "Bin Watch waits for it: \(requests.status)")
+        check(requests.isSetUp && requests.mailboxPath == path, "it doesn't forget where the mailbox is")
+        requests.ask(binPath: reel2, binName: "Reel 2", to: sam.id, message: "While offline")
+        pump(1)
+        let waiting = requests.openRequest(for: reel2)
+        check(waiting != nil && !requests.delivered.contains(waiting!.id), "asking still works, and it's marked as not sent yet")
+
+        if let path = ProcessInfo.processInfo.environment["SNAP_DIR"] {
+            Navigation.shared.selection = .watching
+            pump(1)
+            snapshot(path + "/not-sent.png")
+            Navigation.shared.selection = .browse
+            pump(0.5)
+        }
+
+        print("Bin requests — macOS refuses access for a while")
+        RequestCenter.permissionGrace = 0
+        requests.retryNow()
+        pump(2)
+        check(requests.status == .needsPermission, "it asks for the folder again: \(requests.status)")
+        check(alerts.items.contains { $0.kind == .mailboxProblem }, "…with an alert you can't miss")
+
+        print("Bin requests — the storage comes back")
+        RequestCenter.permissionGrace = 30
+        try! fm.createDirectory(at: box, withIntermediateDirectories: true)
+        requests.retryNow()
+        pump(4)
+        check(requests.status == .connected, "it reconnects by itself: \(requests.status)")
+        check(!alerts.items.contains { $0.kind == .mailboxProblem }, "…and the alert goes away")
+        check(requests.lastCheck?.problem == nil && requests.lastCheck != nil, "…after checking it can really send and receive")
+        check(samBox.people().contains { $0.person.id == requests.me.id && Date().timeIntervalSince($0.lastSeen) < 30 },
+              "Sam sees you online again straight away")
+        pump(4)
+        let arrived = samBox.requests().first { $0.id == waiting?.id }
+        check(arrived?.message == "While offline" && arrived?.status == .open, "the request you made while it was gone is delivered")
+        check(waiting.map { requests.delivered.contains($0.id) } == true, "…and is now marked as sent")
+        requests.cancelRequest(for: reel2)
+        store.unwatch(store.watched.first { $0.relativePath == reel2 }!)
+        pump(4)
+        check(samBox.requests().first { $0.id == waiting?.id }?.status == .cancelled, "cancelling reaches the mailbox too")
+
         requests.turnOff()
     }
 }

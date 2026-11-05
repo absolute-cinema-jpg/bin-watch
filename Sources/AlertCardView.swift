@@ -18,6 +18,7 @@ struct AlertStackView: View {
         case .request: return 96
         case .available, .newBins: return 88
         case .reply: return 64
+        case .mailboxProblem: return 88
         }
     }
 
@@ -136,6 +137,8 @@ struct AlertCard: View {
             return ("REPLY", positive ? "checkmark.bubble.fill" : "text.bubble.fill",
                     positive ? [Color(red: 0.25, green: 0.6, blue: 1), Color(red: 0.15, green: 0.42, blue: 0.9)]
                              : [Color(red: 0.98, green: 0.65, blue: 0.25), Color(red: 0.9, green: 0.45, blue: 0.15)])
+        case .mailboxProblem:
+            return ("BIN REQUESTS", "exclamationmark.triangle.fill", [Color(red: 0.98, green: 0.65, blue: 0.25), Color(red: 0.9, green: 0.45, blue: 0.15)])
         }
     }
 
@@ -150,6 +153,8 @@ struct AlertCard: View {
                 twoRow(lines: 1, primary: ("Show \(item.noun.capitalized)", .primary), secondary: ("Dismiss", .secondary))
             case .newBins(let count):
                 twoRow(lines: 1, primary: ("Show \(item.noun.capitalized)\(count == 1 ? "" : "s")", .primary), secondary: ("Dismiss", .secondary))
+            case .mailboxProblem:
+                twoRow(lines: 1, primary: ("Choose Folder…", .primary), secondary: ("Later", .secondary))
             case .reply:
                 HStack(spacing: 11) {
                     badge

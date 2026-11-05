@@ -63,6 +63,15 @@ When a bin you need is locked, you can ask whoever has it open to close it. This
 
 Requests expire after 12 hours. Each person's Bin Watch only ever writes its own message files, and tidies up its own old ones.
 
+**Knowing it got through.** The label next to a bin you've asked for tells you where your request is:
+
+- **Not sent yet** (orange): the mailbox can't be reached right now. Bin Watch sends it automatically as soon as it can.
+- **Asked Sam · offline** (orange): it's in the mailbox, but Sam's Bin Watch isn't running. It appears on their screen when it next connects, if that's within 12 hours.
+- **Asked Sam**: it's in the mailbox and Sam is online.
+- **Seen by Sam**: it has appeared on Sam's screen.
+
+**If the connection drops.** Network volumes often mount after login items start, and drop during sleep. Bin Watch remembers the mailbox and keeps trying by itself, so nothing needs doing. If macOS itself stops letting Bin Watch into the folder, you get an alert asking you to choose the same folder again. **Settings → Bin Requests** shows the current state, and **Check Connection** tests listing, writing and reading a small file in the mailbox, then removes it.
+
 ## Read-only, guaranteed by macOS
 
 - **The monitored folder is read-only.** Bin Watch runs in the macOS App Sandbox and opens your monitored folder through a read-only bookmark, so macOS refuses any attempt to create, change, move or delete anything there. macOS's folder picker briefly grants write access to whatever you pick, so Bin Watch restarts itself right after you choose the folder. That way it never keeps that access.
