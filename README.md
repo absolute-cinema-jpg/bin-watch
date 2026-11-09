@@ -120,6 +120,8 @@ Found a bug or have an idea? [Open an issue](https://github.com/absolute-cinema-
 
 ## License
 
-[MIT](LICENSE) © Alex Stuart
+Copyright © 2026 Alex Stuart
+
+Bin Watch is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version. It comes with no warranty. Anything you distribute that's based on it must also be shared under the GPL, with its source code.
 
 Bin Watch is an independent project and isn't affiliated with or endorsed by Avid Technology. Avid and Media Composer are trademarks of Avid Technology, Inc.
