@@ -2,7 +2,23 @@
 
 A monitoring app that tells you when an Avid bin or script someone else has open becomes free. It checks for the `.lck` file Avid keeps beside an open bin (`.avb`) or script (`.avc`), and when that file is gone you get an alert. Everything below that says "bin" works the same way for scripts.
 
-## Build & install
+It's free and open source. It can also ask whoever has a bin open to close it, without any network setup.
+
+Made by **Alex Stuart**.
+
+<!-- Demo GIF or screenshot goes here: a bin unlocking, the alert sliding in, clicking Show Bin.
+     Record it on a fake project only — no real bin or project names.
+![Bin Watch alerting that a bin is free](docs/demo.gif)
+-->
+
+## Download
+
+1. Download **Bin-Watch-x.y.zip** from the [latest release](https://github.com/absolute-cinema-jpg/bin-watch/releases/latest), unzip it, and drag **Bin Watch** into Applications.
+2. **The first time you open it, macOS blocks it** because Bin Watch isn't notarised by Apple yet. Open it once, click **Done**, then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. On macOS 14 and earlier, right-clicking the app and choosing **Open** also works. You only need to do this once.
+
+**Requires** macOS 13 Ventura or later. Runs natively on Apple Silicon and Intel Macs.
+
+## Build from source
 
 ```bash
 ./build.sh install     # builds and copies "Bin Watch.app" into /Applications
@@ -97,3 +113,13 @@ codesign -d --entitlements - "/Applications/Bin Watch.app"
 
 - After a rebuild, the monitored folder may show an orange dot (meaning it can't be reached). If it does, click **Change…** and pick the same folder again. Its saved permission is tied to the app's signature.
 - **Open Bin Watch when I log in** works best when the app is in /Applications.
+
+## Feedback
+
+Found a bug or have an idea? [Open an issue](https://github.com/absolute-cinema-jpg/bin-watch/issues). Please don't include real project or bin names.
+
+## License
+
+[MIT](LICENSE) © Alex Stuart
+
+Bin Watch is an independent project and isn't affiliated with or endorsed by Avid Technology. Avid and Media Composer are trademarks of Avid Technology, Inc.
