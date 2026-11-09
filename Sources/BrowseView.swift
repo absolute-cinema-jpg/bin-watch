@@ -800,6 +800,8 @@ struct BinContextMenu: View {
 struct ColumnBrowser: View {
     let currentListing: FolderListing?
     @ObservedObject private var browser = BrowserModel.shared
+    /// Widths the user set by dragging a column's divider, keyed by the column's folder.
+    @State private var customWidths: [String: CGFloat] = [:]
 
     var body: some View {
         let path = browser.path
@@ -810,10 +812,10 @@ struct ColumnBrowser: View {
                         let relative = path.prefix(level).joined(separator: "/")
                         Group {
                             if level == path.count {
-                                FinderColumn(level: level, listing: currentListing)
+                                FinderColumn(level: level, listing: currentListing, customWidth: $customWidths[relative])
                             } else {
                                 FolderLoader(relative: relative) { listing, _ in
-                                    FinderColumn(level: level, listing: listing)
+                                    FinderColumn(level: level, listing: listing, customWidth: $customWidths[relative])
                                 }
                                 .id(relative)
                             }
@@ -847,6 +849,20 @@ struct ColumnBrowser: View {
 private struct FinderColumn: View {
     let level: Int
     let listing: FolderListing?
+    /// Set by dragging the column's right edge; nil means "fit the longest name".
+    @Binding var customWidth: CGFloat?
+    @State private var dragStart: CGFloat?
+
+    /// Wide enough for the longest name: text plus icon, badges, chevron and padding.
+    private var fitWidth: CGFloat {
+        guard let listing else { return 230 }
+        let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        let names = listing.folders.map(\.name) + listing.bins.map(\.name)
+        let longest = names.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        return min(max(ceil(longest) + 92, 180), 420)
+    }
+
+    private var width: CGFloat { customWidth ?? fitWidth }
     @EnvironmentObject var store: AppStore
     @ObservedObject private var browser = BrowserModel.shared
     @ObservedObject private var watcher = NewBinWatcher.shared
@@ -870,7 +886,7 @@ private struct FinderColumn: View {
                         }
                     }
                     .padding(6)
-                    .frame(width: 230)
+                    .frame(width: width)
                     .frame(minHeight: geo.size.height, alignment: .top)
                     // Like Finder: clicking empty space in a column deselects in that column.
                     .background(EmptySpaceTap {
@@ -881,8 +897,26 @@ private struct FinderColumn: View {
                 .scrollsToSelection(proxy)
             }
         }
-        .frame(width: 230)
+        .frame(width: width)
         .frame(maxHeight: .infinity)
+        .overlay(alignment: .trailing) { resizeHandle }
+    }
+
+    /// Drag the right edge to resize the column; double-click it to fit the names again.
+    private var resizeHandle: some View {
+        Color.clear
+            .frame(width: 8)
+            .contentShape(Rectangle())
+            .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    let start = dragStart ?? width
+                    if dragStart == nil { dragStart = start }
+                    customWidth = min(max(start + value.translation.width, 180), 600)
+                }
+                .onEnded { _ in dragStart = nil })
+            .onTapGesture(count: 2) { customWidth = nil }
+            .help("Drag to resize. Double-click to fit the names.")
     }
 
     private var isDeepest: Bool { level == browser.path.count - 1 && browser.selection.isEmpty }
