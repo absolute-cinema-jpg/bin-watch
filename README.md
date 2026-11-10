@@ -1,12 +1,8 @@
 # Bin Watch
 
-![Bin Watch: know the moment a locked bin is free](docs/banner.png)
-
 A monitoring app that tells you when an Avid bin or script someone else has open becomes free. It checks for the `.lck` file Avid keeps beside an open bin (`.avb`) or script (`.avc`), and when that file is gone you get an alert. Everything below that says "bin" works the same way for scripts.
 
 It's free and open source. It can also ask whoever has a bin open to close it, without any network setup.
-
-Made by **Alex Stuart**.
 
 ![Reel 2 frees up on the Watching page, a Bin Available alert slides in, and clicking Show Bin opens it in Media Composer](docs/demo.gif)
 
