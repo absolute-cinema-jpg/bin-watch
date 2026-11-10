@@ -89,15 +89,15 @@ enum InteractionTests {
         print("Column view — mouse")
         window.setContentSize(NSSize(width: 1500, height: 600))   // room for the preview column, so nothing scrolls
         bm.go(to: ["Documentary S1", "3 Cuts"]); pump(1)
-        click(800, 96);                    check(bm.selection == [r[0]], "click a bin in the last column selects it")
-        click(800, 146, .command);         check(bm.selection == [r[0], r[2]], "⌘-click adds")
-        click(800, 171, .shift);           check(bm.selection == Set(r[2...3]), "⇧-click selects a range")
-        click(800, 450);                   check(bm.selection.isEmpty && bm.path == ["Documentary S1", "3 Cuts"], "clicking empty space in the column deselects")
+        click(680, 96);                    check(bm.selection == [r[0]], "click a bin in the last column selects it")
+        click(680, 146, .command);         check(bm.selection == [r[0], r[2]], "⌘-click adds")
+        click(680, 171, .shift);           check(bm.selection == Set(r[2...3]), "⇧-click selects a range")
+        click(680, 450);                   check(bm.selection.isEmpty && bm.path == ["Documentary S1", "3 Cuts"], "clicking empty space in the column deselects")
         click(580, 450); pump(0.3);        check(bm.path == ["Documentary S1"], "clicking empty space in an earlier column closes the columns after it")
         click(580, 121); pump(0.5);        check(bm.path == ["Documentary S1", "3 Cuts"], "clicking a folder in a column opens it")
         var columnOpened: [String] = []
         BinOpener.testHook = { columnOpened = $0.map(\.lastPathComponent) }
-        doubleClick(800, 96);              check(columnOpened == ["Reel 1.avb"], "double-clicking a bin in a column opens it")
+        doubleClick(680, 96);              check(columnOpened == ["Reel 1.avb"], "double-clicking a bin in a column opens it")
         columnOpened = []
         click(580, 400); pump(0.3)         // back to Documentary S1's column
         doubleClick(580, 121); pump(0.5)   // double-click the "3 Cuts" folder

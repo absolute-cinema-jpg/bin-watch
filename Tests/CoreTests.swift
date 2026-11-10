@@ -321,6 +321,8 @@ func check(_ cond: Bool, _ msg: String) {
               "everything written stays in the mailbox's own subfolders")
         try? fm.removeItem(at: shared)
 
+        try UpdateTests.run(dir: URL(fileURLWithPath: CommandLine.arguments[1]))
+
         try? fm.removeItem(at: root)
         print(failures == 0 ? "\nAll tests passed." : "\n\(failures) FAILED")
         exit(failures == 0 ? 0 : 1)

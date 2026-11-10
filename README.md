@@ -18,12 +18,21 @@ Made by **Alex Stuart**.
 
 **Requires** macOS 13 Ventura or later. Runs natively on Apple Silicon and Intel Macs.
 
+### Updating
+
+From version 1.7, Bin Watch updates itself. Once a day it asks GitHub whether there's a newer version, and if there is, an **Update Available** card appears above the monitored folder. Click **Update Now** and Bin Watch downloads it, checks it and restarts into it, keeping your watched bins and settings. Nothing is installed until you click. You can also use **Check for Updates…** in the Bin Watch menu, or **Settings → Updates**, which shows what's new and lets you turn the daily check off.
+
+Before installing, Bin Watch checks that the download matches the checksum published with the release, is a correctly signed copy of Bin Watch at the expected version, and still runs in the App Sandbox. If anything doesn't match, nothing is changed.
+
+If you're not an administrator on your Mac, macOS may not let Bin Watch replace itself. Bin Watch then offers **Download from GitHub** instead. Versions before 1.7 can't update themselves, so install 1.7 by hand once.
+
 ## Build from source
 
 ```bash
 ./build.sh install     # builds and copies "Bin Watch.app" into /Applications
 ./build.sh             # just builds into ./build
-./Tests/run.sh         # tests the lock detection logic against a fake project
+./Tests/run.sh         # tests the lock detection, mailbox, update and bug report logic
+./Tests/run-ui.sh      # clicks through the real interface offscreen, silently
 ```
 
 The build only needs Apple's Command Line Tools. Xcode isn't required.
@@ -92,9 +101,11 @@ Requests expire after 12 hours. Each person's Bin Watch only ever writes its own
 
 - **The monitored folder is read-only.** Bin Watch runs in the macOS App Sandbox and opens your monitored folder through a read-only bookmark, so macOS refuses any attempt to create, change, move or delete anything there. macOS's folder picker briefly grants write access to whatever you pick, so Bin Watch restarts itself right after you choose the folder. That way it never keeps that access.
 - **The code only lists folders and reads lock names.** All project access is in [Sources/ReadOnlyFS.swift](Sources/ReadOnlyFS.swift). It lists folders and checks which files exist. To show who has a bin open, it also reads the first 1 KB of a `.lck` file, read-only, and closes it straight away. Each lock file is read only once, and again only if it changes. Turn off **Show who has a locked bin or script open** in Settings and Bin Watch never opens a `.lck` file at all; it only checks whether they exist.
-- **Writes only go to two places:**
+- **Writes only go to three places:**
   - **The request mailbox** ([Sources/Mailbox.swift](Sources/Mailbox.swift)). It can't be your monitored folder, contain it, or sit inside an Avid project. Every write goes through one guarded function that only accepts the mailbox's own subfolders.
   - **Bin Watch's private sound library** inside its sandbox container.
+  - **Bin Watch.app itself, when you click Update.** macOS won't let a sandboxed app install its own update, so a small helper inside Bin Watch.app does just that ([Sources/Updater](Sources/Updater)). It starts outside the App Sandbox, but before doing anything it locks itself into a sandbox of its own: from then on macOS refuses it any network access, and any write except to Bin Watch.app, a temporary folder beside it and its own temp folder. The tools it runs to unpack and check the update are held to the same limits. Bin Watch itself still runs in the App Sandbox.
+- **It only connects to GitHub, and only to check for and download updates.** Turn off **Check for updates automatically** in Settings and it only does that when you ask. Bug reports open in your browser; Bin Watch doesn't send them itself.
 - **It avoids false alarms.** A bin has to look free on two checks in a row before you're alerted. A workspace dropping offline never counts as "unlocked".
 
 To check the entitlements yourself:
@@ -116,7 +127,11 @@ codesign -d --entitlements - "/Applications/Bin Watch.app"
 
 ## Feedback
 
-Found a bug or have an idea? [Open an issue](https://github.com/absolute-cinema-jpg/bin-watch/issues). Please don't include real project or bin names.
+Found a bug? Choose **Help → Report a Bug…** in Bin Watch, or **Report a Bug…** in **Settings → Help**. Describe what happened, and Bin Watch opens GitHub's new-issue page in your browser with your report filled in, for you to check and post. You'll need a free GitHub account.
+
+It can add technical details: your Bin Watch and macOS versions, how Bin Watch is set up (for example whether the monitored folder is on an SMB or AFP server, and whether the mailbox is connected) and recent connection events. Click **Show What's Included** to see exactly what's added. It never includes the names of projects, bins, folders, people or computers. Reports are public, so please don't type real project or bin names either.
+
+Have an idea instead? [Open an issue](https://github.com/absolute-cinema-jpg/bin-watch/issues).
 
 ## License
 

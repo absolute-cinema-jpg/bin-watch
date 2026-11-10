@@ -31,6 +31,7 @@ enum ManageWindow {
 
 struct MenuBarView: View {
     @EnvironmentObject var store: AppStore
+    @ObservedObject private var updater = Updater.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -72,6 +73,12 @@ struct MenuBarView: View {
             Divider()
 
             VStack(spacing: 0) {
+                if updater.phase == .available, let version = updater.update?.version {
+                    MenuButton(title: "Update to Bin Watch \(version)", symbol: "arrow.down.circle") {
+                        ManageWindow.show()
+                        updater.installAsking()
+                    }
+                }
                 MenuButton(title: "Open Bin Watch", symbol: "macwindow") { ManageWindow.show() }
                 MenuButton(title: "Quit Bin Watch", symbol: "power") { NSApp.terminate(nil) }
             }

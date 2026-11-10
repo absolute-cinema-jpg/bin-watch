@@ -10,6 +10,7 @@ final class Navigation: ObservableObject {
     @Published var selection: SidebarItem? = .browse
     /// The bin the "Ask for this bin" sheet is open for.
     @Published var askTarget: AskTarget?
+    @Published var showBugReport = false
 
     func ask(relativePath: String, name: String, holder: String? = nil) {
         askTarget = AskTarget(relativePath: relativePath, name: name, holder: holder)
@@ -37,6 +38,7 @@ struct ManageView: View {
         .sheet(item: $nav.askTarget) { target in
             AskSheet(target: target).environmentObject(store)
         }
+        .sheet(isPresented: $nav.showBugReport) { BugReportSheet() }
     }
 
     // MARK: Sidebar
@@ -85,8 +87,11 @@ struct ManageView: View {
             }
             .listStyle(.sidebar)
 
-            MonitoredFolderCard()
-                .padding(12)
+            VStack(spacing: 8) {
+                UpdateSidebarCard()
+                MonitoredFolderCard()
+            }
+            .padding(12)
         }
         .background(VisualEffectBackground(material: .sidebar))
     }

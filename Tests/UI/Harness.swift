@@ -50,8 +50,8 @@ func key(_ code: UInt16, _ mods: NSEvent.ModifierFlags = []) {
     pump(0.4)
 }
 
-func snapshot(_ out: String) {
-    let host = window.contentView!
+func snapshot(_ out: String, of target: NSWindow? = nil) {
+    let host = (target ?? window).contentView!
     let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
     host.cacheDisplay(in: host.bounds, to: rep)
     // Paint the window's background behind the view, as the screen would.
@@ -61,7 +61,7 @@ func snapshot(_ out: String) {
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: flat)
     let bounds = NSRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh)
-    window.backgroundColor.setFill(); bounds.fill()
+    (target ?? window).backgroundColor.setFill(); bounds.fill()
     rep.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: nil)
     NSGraphicsContext.restoreGraphicsState()
     try! flat.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out))
@@ -115,6 +115,7 @@ func snapshot(_ out: String) {
         RequestFlowTests.run(store, dir: dir)
         NewBinsFlowTests.run(store, dir: dir)
         LockedFlowTests.run(store, dir: dir)
+        HelpFlowTests.run(store, dir: dir)
         check(AlertCenter.shared.chimesSuppressed > 0, "alerts were raised during the tests, but no sound was played")
         print(fails == 0 ? "interaction tests passed" : "\(fails) interaction tests FAILED")
         exit(fails == 0 ? 0 : 1)

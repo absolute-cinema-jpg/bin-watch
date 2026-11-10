@@ -18,6 +18,23 @@ struct BinWatchApp: App {
             Image(systemName: store.pendingAlerts.isEmpty ? "lock.rectangle.stack" : "lock.open.fill")
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    ManageWindow.show()
+                    Navigation.shared.selection = .settings
+                    Updater.shared.check()
+                }
+            }
+            CommandGroup(replacing: .help) {
+                Button("Report a Bug…") {
+                    ManageWindow.show()
+                    Navigation.shared.showBugReport = true
+                }
+                Button("Known Issues") { LinkOpener.open(BugReport.issuesPage) }
+                Button("Bin Watch on GitHub") { LinkOpener.open(URL(string: "https://github.com/\(UpdateLogic.repo)")!) }
+            }
+        }
     }
 }
 
@@ -34,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = AppStore.shared
         _ = RequestCenter.shared
         _ = NewBinWatcher.shared
+        Updater.shared.start()
         ManageWindow.show()
         if CommandLine.arguments.contains("--test-alert") {
             AppStore.shared.showTestAlert(count: 3)

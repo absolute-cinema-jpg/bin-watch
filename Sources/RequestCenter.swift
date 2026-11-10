@@ -614,16 +614,18 @@ extension JSONEncoder {
 enum Relauncher {
     static var isSandboxed: Bool { ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil }
 
-    static func relaunch() {
-        guard isSandboxed else { return }     // tests and harnesses run unsandboxed
+    static func relaunch(completion: ((Bool) -> Void)? = nil) {
+        guard isSandboxed else { completion?(false); return }     // tests and harnesses run unsandboxed
         UserDefaults.standard.synchronize()
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
-        config.arguments = ["--show-window"]
         NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { app, error in
             // Only quit once the new copy is running — never leave the person with no Bin Watch.
-            guard app != nil, error == nil else { return }
-            DispatchQueue.main.async { NSApp.terminate(nil) }
+            let launched = app != nil && error == nil
+            DispatchQueue.main.async {
+                completion?(launched)
+                if launched { NSApp.terminate(nil) }
+            }
         }
     }
 }

@@ -14,5 +14,9 @@
     <!-- Remember chosen project folders between launches (still read-only). -->
     <key>com.apple.security.files.bookmarks.app-scope</key>
     <true/>
+    <!-- Ask GitHub whether there's a newer version, and download it when you click Update.
+         Network access doesn't grant any access to files. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
 </dict>
 </plist>

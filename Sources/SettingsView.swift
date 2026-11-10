@@ -124,6 +124,10 @@ struct SettingsView: View {
                     }
                 }
 
+                UpdatesSettings()
+
+                HelpSettings()
+
                 Section {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "checkmark.shield.fill")
