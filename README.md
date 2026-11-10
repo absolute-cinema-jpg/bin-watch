@@ -1,15 +1,14 @@
 # Bin Watch
 
+![Bin Watch: know the moment a locked bin is free](docs/banner.png)
+
 A monitoring app that tells you when an Avid bin or script someone else has open becomes free. It checks for the `.lck` file Avid keeps beside an open bin (`.avb`) or script (`.avc`), and when that file is gone you get an alert. Everything below that says "bin" works the same way for scripts.
 
 It's free and open source. It can also ask whoever has a bin open to close it, without any network setup.
 
 Made by **Alex Stuart**.
 
-<!-- Demo GIF or screenshot goes here: a bin unlocking, the alert sliding in, clicking Show Bin.
-     Record it on a fake project only — no real bin or project names.
-![Bin Watch alerting that a bin is free](docs/demo.gif)
--->
+![Reel 2 frees up on the Watching page, a Bin Available alert slides in, and clicking Show Bin opens it in Media Composer](docs/demo.gif)
 
 ## Download
 
@@ -53,6 +52,8 @@ The build only needs Apple's Command Line Tools. Xcode isn't required.
 5. **Locked:** lists every bin and script that's open anywhere in the monitored folder, grouped by who has it. Click a person (or computer) at the top, or on a group's heading, to see only what they have open, e.g. everything Jack has locked. Type in **Filter by name** to narrow it further. **Watch All** watches everything in a group, so you're alerted as each one frees up. Each row also has **Ask…** and **Watch**, and double-clicking opens it just like in Browse. The list is checked every 15 seconds, but only while the page is open, because listing a whole project tree is far more work than checking a few watched bins.
 6. Click **Watch** on the bins you're waiting for. The **Watching** page shows their live status and has a **Clear All** button, which asks for confirmation first.
 
+![Browsing a project and clicking Watch on Reel 2, which is locked by Sam Okafor](docs/watch.gif)
+
 When a watched bin goes from locked to free:
 
 - A compact alert slides in at the top right and plays your chosen sound.
@@ -69,6 +70,8 @@ When a watched bin goes from locked to free:
 
 Get an alert when bins appear in a folder, for example new scene bins landing in your project.
 
+![Turning on New Bin Alerts for the Scenes folder, then a New Bin alert for SC 14 – Rooftop](docs/new-bins.gif)
+
 - **Turning it on:** in **Browse**, open the folder and click **New Bin Alerts** next to the path bar. The button turns solid blue when alerts are on. You can also right-click a folder and choose **Alert Me About New Bins**. New scripts count too.
 - **Marked folders:** folders with alerts on show a blue ✦ badge in every view, plus a "New bin alerts" tag in List view. Folders covered because a parent folder includes subfolders show a fainter badge. A bin covered by two watched folders is only announced once.
 - **The New Bins tab:** lists those folders and the bins that have recently appeared. Turn on **Include subfolders** to cover a whole tree; folders are checked every 5 seconds, or every 30 seconds with subfolders on.
@@ -81,10 +84,14 @@ Get an alert when bins appear in a folder, for example new scene bins landing in
 
 When a bin you need is locked, you can ask whoever has it open to close it. This works without Wi-Fi or any network setup: Bin Watch passes messages as small files in a shared **mailbox folder** on the same storage as your projects. It works over NEXIS, file servers and synced storage like Salon SyncBox, where it also reaches other sites.
 
+![A request travels from your Mac through a shared folder to Jack's Mac, and "I'll close it" comes back. No internet, no Wi-Fi, no setup](docs/offline.gif)
+
 1. **Set up (once per person):** open Settings, then **Bin Requests**, then **Choose…**, and pick the same folder as everyone else. Create a new empty folder for this, outside your Avid projects; Bin Watch refuses folders inside a project. Check **Your name**.
 2. **Ask:** click **Ask…** next to any locked bin. It appears in Browse, on the Watching page, in the right-click menu, and in Columns view's preview. Choose a person, or **Everyone using Bin Watch** if you're not sure who has it, and add an optional note. Asking also watches the bin.
 3. **Their side:** they get a purple request alert with **I'll close it** and **Not now** (or **Not me**, when you asked everyone). You see their answer as an alert, and on the Watching page ("Seen by Sam", "Sam is closing it").
 4. **When the bin frees up:** you get the usual alert, and the request disappears from everyone's screen by itself.
+
+![Clicking Ask… on Assembly v3, adding the note "Need it for the trailer" and sending the request](docs/ask.gif)
 
 Requests expire after 12 hours. Each person's Bin Watch only ever writes its own message files, and tidies up its own old ones.
 
