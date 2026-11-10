@@ -1,4 +1,5 @@
 import AppKit
+import SystemConfiguration
 import SwiftUI
 
 /// Asking other Bin Watch users to close a bin, and answering their requests.
@@ -81,9 +82,13 @@ final class RequestCenter: ObservableObject {
     private var replyCardsByRequest: [UUID: [UUID]] = [:]
 
     var me: Person {
-        Person(id: myID, name: myName, computer: Host.current().localizedName ?? "Mac",
-               hostName: ProcessInfo.processInfo.hostName)
+        Person(id: myID, name: myName, computer: Self.computerName, hostName: Self.localHostName)
     }
+
+    // Read from the Mac's own settings. Host.current() and ProcessInfo.hostName do DNS and
+    // Bonjour lookups instead, which makes macOS ask for Local Network access.
+    private static let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "Mac"
+    private static let localHostName = (SCDynamicStoreCopyLocalHostName(nil) as String?).map { $0 + ".local" }
 
     // MARK: Who has it open
 
