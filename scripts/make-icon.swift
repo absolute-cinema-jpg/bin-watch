@@ -42,7 +42,8 @@ let stack = symbol("rectangle.stack.fill", 300, NSColor.white.withAlphaComponent
 stack.draw(in: CGRect(x: (size - stack.size.width) / 2, y: 470, width: stack.size.width, height: stack.size.height))
 
 let lock = symbol("lock.open.fill", 380, .white)
-lock.draw(in: CGRect(x: (size - lock.size.width) / 2 + 20, y: (size - lock.size.height) / 2 - 40,
+// Vertically centred on the tile (the symbol's ink sits evenly inside its box).
+lock.draw(in: CGRect(x: (size - lock.size.width) / 2 + 20, y: (size - lock.size.height) / 2,
                      width: lock.size.width, height: lock.size.height))
 
 image.unlockFocus()
