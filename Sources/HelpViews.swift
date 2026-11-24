@@ -112,7 +112,8 @@ struct UpdatesSettings: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable().frame(width: 36, height: 36)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Bin Watch \(updater.currentVersion)").font(.body.weight(.medium))
+                    (Text("Bin Watch \(updater.currentVersion)").font(.body.weight(.medium))
+                        + Text(" – made by Alex Stuart").font(.callout).foregroundColor(.secondary))
                     UpdateStatusLine()
                 }
                 Spacer()
