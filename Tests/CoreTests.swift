@@ -293,6 +293,16 @@ func check(_ cond: Bool, _ msg: String) {
         let oldTimer = Person(id: UUID(), name: "Pat", computer: "Edit 3")
         try JSONEncoder().encode(oldTimer).write(to: box.appendingPathComponent("people/\(oldTimer.id.uuidString).json"))
         check(samBox.people().first { $0.person.id == oldTimer.id }.map { Date().timeIntervalSince($0.lastSeen) < 60 } == true, "colleagues on an older version still show as online")
+        check(samBox.people().first { $0.person.id == oldTimer.id }.map { $0.version == nil } == true, "…with no version, since they don't share it")
+        alexBox.appVersion = "1.8"
+        try alexBox.publishPresence()
+        check(samBox.people().first { $0.person.id == alex.id }?.version == "1.8", "everyone can see which version you're running")
+        let presenceFile = try Data(contentsOf: box.appendingPathComponent("people/\(alex.id.uuidString).json"))
+        struct OldPresence: Decodable { let id: UUID; let name: String; let computer: String; let at: Date? }
+        let oldReader = JSONDecoder()
+        oldReader.dateDecodingStrategy = .iso8601
+        check((try? oldReader.decode(OldPresence.self, from: presenceFile))?.name == alex.name,
+              "older versions can still read a presence file that includes the version")
         try fm.removeItem(at: box.appendingPathComponent("people/\(oldTimer.id.uuidString).json"))
         // Someone who reinstalled has a new ID: their old self mustn't linger as a second person.
         let samBefore = MailboxClient(folder: box, me: Person(id: UUID(), name: "Jo", computer: "Edit 4"))
@@ -320,6 +330,26 @@ func check(_ cond: Bool, _ msg: String) {
         check(written.allSatisfy { $0 == "About this folder.txt" || ["people", "requests", "replies"].contains($0.components(separatedBy: "/")[0]) },
               "everything written stays in the mailbox's own subfolders")
         try? fm.removeItem(at: shared)
+
+        print("Where Bin Watch runs from (for opening at login)")
+        let home = "/Users/sam"
+        let place = { (path: String, startup: Bool, local: Bool) in
+            AppLocation.classify(path: path, home: home, volumeName: startup ? nil : "Media 4", onStartupDisk: startup, isLocal: local) }
+        check(place("/Applications/Bin Watch.app", true, true) == .applications
+              && place("/Users/sam/Applications/Bin Watch.app", true, true) == .applications, "Applications, yours or the Mac's")
+        check(place("/Users/sam/Downloads/Bin Watch.app", true, true) == .otherFolder, "another folder on this Mac")
+        check(place("/Volumes/Media 4/Tools/Bin Watch.app", false, true) == .otherVolume(name: "Media 4", network: false),
+              "an external drive, by name")
+        check(place("/Volumes/Media 4/Bin Watch.app", false, false) == .otherVolume(name: "Media 4", network: true), "a network volume")
+        check(place("/private/var/folders/x/T/AppTranslocation/1234/d/Bin Watch.app", true, true) == .temporaryCopy,
+              "a temporary copy macOS made from a download")
+        check(AppLocation.applications.loginProblem == nil && AppLocation.otherFolder.loginProblem == nil,
+              "from this Mac's disk it can open at login")
+        check(AppLocation.otherVolume(name: "Media 4", network: false).loginProblem?.contains("“Media 4”") == true
+              && AppLocation.temporaryCopy.loginProblem?.contains("temporary copy") == true,
+              "from another drive or a temporary copy it explains why it can't")
+        check(!AppLocation.otherVolume(name: "Media 4", network: false).summary.contains("Media"),
+              "bug reports say the kind of drive, not its name")
 
         try UpdateTests.run(dir: URL(fileURLWithPath: CommandLine.arguments[1]))
 

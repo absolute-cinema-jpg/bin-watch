@@ -10,6 +10,8 @@ final class RequestCenter: ObservableObject {
     struct PersonStatus: Identifiable, Equatable {
         let person: Person
         let lastSeen: Date
+        /// Their Bin Watch version, or nil if they're on 1.7.2 or earlier (before it was shared).
+        var version: String? = nil
         var id: UUID { person.id }
         var isOnline: Bool { Date().timeIntervalSince(lastSeen) < MailboxClient.onlineWindow }
     }
@@ -437,7 +439,7 @@ final class RequestCenter: ObservableObject {
         queue.async { [weak self] in
             let access = client.checkAccess()
             var presenceWritten = false
-            var people: [(person: Person, lastSeen: Date)]?
+            var people: [(person: Person, lastSeen: Date, version: String?)]?
             var listing: MailboxClient.RequestListing?
             var confirmed = Set<UUID>()
             var sent: [RequestReply] = []
@@ -491,7 +493,7 @@ final class RequestCenter: ObservableObject {
                 for reply in sent where self.unsentReplies[reply.requestID] == reply { self.unsentReplies[reply.requestID] = nil }
                 self.expireOldRequests()
                 if let people {
-                    let statuses = people.map { PersonStatus(person: $0.person, lastSeen: $0.lastSeen) }
+                    let statuses = people.map { PersonStatus(person: $0.person, lastSeen: $0.lastSeen, version: $0.version) }
                         .sorted { ($0.isOnline ? 0 : 1, $0.person.name) < ($1.isOnline ? 0 : 1, $1.person.name) }
                     if self.people != statuses { self.people = statuses }
                 }

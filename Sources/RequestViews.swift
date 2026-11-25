@@ -311,6 +311,7 @@ struct BinRequestsSettings: View {
                                 .frame(width: 7, height: 7)
                             Text(status.person.name)
                             Text(status.person.computer).foregroundStyle(.secondary)
+                            PersonVersionTag(version: status.version)
                             Spacer()
                             Text(status.isOnline ? "Online" : "Seen \(status.lastSeen.formatted(.relative(presentation: .named)))")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -325,5 +326,41 @@ struct BinRequestsSettings: View {
     private func commitName() {
         let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty { requests.myName = trimmed } else { nameDraft = requests.myName }
+    }
+}
+
+/// The version of Bin Watch a colleague is running, beside their name in Settings. Orange when
+/// it's older than yours, or too old to say (versions before 1.8 don't share it).
+struct PersonVersionTag: View {
+    let version: String?
+    var mine: String = PersonVersionTag.mineForTests ?? Updater.shared.currentVersion
+    /// The UI tests aren't a bundled app, so they say which version "yours" is.
+    static var mineForTests: String?
+
+    enum Kind: Equatable { case same, newer, older, unknown }
+
+    static func kind(of version: String?, comparedTo mine: String) -> Kind {
+        guard let version, let theirs = AppVersion(version) else { return .unknown }
+        guard let ours = AppVersion(mine) else { return .same }
+        return theirs < ours ? .older : theirs > ours ? .newer : .same
+    }
+
+    var body: some View {
+        let kind = Self.kind(of: version, comparedTo: mine)
+        Text(kind == .unknown ? "1.7.2 or older" : version ?? "")
+            .font(.caption.monospacedDigit())
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .foregroundStyle(kind == .older || kind == .unknown ? Color.orange : Color.secondary)
+            .background((kind == .older || kind == .unknown ? Color.orange : Color.primary).opacity(0.1), in: Capsule())
+            .help(help(kind))
+    }
+
+    private func help(_ kind: Kind) -> String {
+        switch kind {
+        case .same: return "Bin Watch \(version ?? ""), the same as yours"
+        case .newer: return "Bin Watch \(version ?? ""), newer than yours (\(mine)). You can update in Settings → Updates."
+        case .older: return "Bin Watch \(version ?? ""), older than yours (\(mine)). They can update in Settings → Updates."
+        case .unknown: return "An older Bin Watch that doesn't say its version (1.7.2 or earlier). They can update in Settings → Updates."
+        }
     }
 }

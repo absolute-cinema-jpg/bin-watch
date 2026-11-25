@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// End to end: this app (as "you") and a simulated colleague, Sam, sharing a mailbox folder.
 enum RequestFlowTests {
@@ -22,6 +23,38 @@ enum RequestFlowTests {
         pump(4)
         check(requests.people.map(\.person.name) == ["Sam"] && requests.people.first?.isOnline == true, "you can see Sam is online")
         check(samBox.people().contains { $0.person.id == requests.me.id }, "Sam can see you")
+
+        print("Who's on which version")
+        samBox.appVersion = "1.6"
+        try! samBox.publishPresence()
+        let jo = MailboxClient(folder: box, me: Person(id: UUID(), name: "Jo", computer: "Assist 1"))
+        jo.appVersion = "1.8"
+        try! jo.publishPresence()
+        let pat = Person(id: UUID(), name: "Pat", computer: "Edit 3")       // an old version: no version in the file
+        try! JSONEncoder().encode(pat).write(to: box.appendingPathComponent("people/\(pat.id.uuidString).json"))
+        pump(5)
+        let versions = Dictionary(uniqueKeysWithValues: requests.people.map { ($0.person.name, $0.version ?? "none") })
+        check(versions == ["Sam": "1.6", "Jo": "1.8", "Pat": "none"], "Settings knows everyone's version: \(versions)")
+        typealias Tag = PersonVersionTag
+        check(Tag.kind(of: "1.6", comparedTo: "1.8") == .older && Tag.kind(of: "1.8", comparedTo: "1.8") == .same
+              && Tag.kind(of: "1.9", comparedTo: "1.8") == .newer && Tag.kind(of: nil, comparedTo: "1.8") == .unknown,
+              "versions older than yours, or too old to say, are picked out")
+        if let snaps = ProcessInfo.processInfo.environment["SNAP_DIR"] {
+            PersonVersionTag.mineForTests = "1.8"
+            let panel = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: 700, height: 520),
+                                 styleMask: [.borderless], backing: .buffered, defer: false)
+            panel.appearance = NSAppearance(named: .darkAqua)
+            panel.backgroundColor = NSColor(white: 0.16, alpha: 1)
+            panel.contentView = NSHostingView(rootView: Form { BinRequestsSettings() }.formStyle(.grouped))
+            panel.orderFrontRegardless()
+            pump(1)
+            snapshot(snaps + "/people-versions.png", of: panel)
+            panel.orderOut(nil)
+            PersonVersionTag.mineForTests = nil
+        }
+        try! FileManager.default.removeItem(at: box.appendingPathComponent("people/\(pat.id.uuidString).json"))
+        try! FileManager.default.removeItem(at: box.appendingPathComponent("people/\(jo.me.id.uuidString).json"))
+        pump(4)
 
         print("Who has it open")
         let samsMac = Person(id: sam.id, name: "Sam", computer: "Edit 2", hostName: "EDIT-2.local")

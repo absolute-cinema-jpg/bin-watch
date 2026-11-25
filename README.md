@@ -98,6 +98,8 @@ Requests expire after 12 hours. Each person's Bin Watch only ever writes its own
 - **Asked Sam**: it's in the mailbox and Sam is online.
 - **Seen by Sam**: it has appeared on Sam's screen.
 
+**Who's on which version.** In **Settings → Bin Requests**, each person's Bin Watch version appears beside their name. It's orange when it's older than yours. Versions before 1.8 don't share theirs, so they show as **1.7.2 or older**.
+
 **If the connection drops.** Network volumes often mount after login items start, and drop during sleep. Bin Watch remembers the mailbox and keeps trying by itself, so nothing needs doing. If macOS itself stops letting Bin Watch into the folder, you get an alert asking you to choose the same folder again. **Settings → Bin Requests** shows the current state, and **Check Connection** tests listing, writing and reading a small file in the mailbox, then removes it.
 
 ## Read-only, guaranteed by macOS
@@ -126,7 +128,7 @@ codesign -d --entitlements - "/Applications/Bin Watch.app"
   ```
 
 - After a rebuild, the monitored folder may show an orange dot (meaning it can't be reached). If it does, click **Change…** and pick the same folder again. Its saved permission is tied to the app's signature.
-- **Open Bin Watch when I log in** works best when the app is in /Applications.
+- **Open Bin Watch when I log in** only works when Bin Watch is on this Mac's own disk, ideally in Applications. macOS opens it from wherever it was when you turned the setting on. An external or network drive usually isn't connected yet when you log in. A copy opened straight from where it was downloaded or unzipped runs from a temporary copy that macOS removes when you restart. In both cases Settings explains the problem, and a **Won't Open at Login** card appears in the sidebar. To fix it, quit Bin Watch, drag it into Applications, open it from there and turn the setting on again. Settings also shows if it has been switched off in **System Settings → General → Login Items**.
 
 ## Feedback
 

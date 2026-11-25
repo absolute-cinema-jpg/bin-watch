@@ -3,7 +3,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var launchAtLogin = LoginItem.isOn
+    @State private var loginStatus = SMAppService.mainApp.status
     @State private var loginError: String?
     @State private var soundError: String?
 
@@ -122,6 +123,22 @@ struct SettingsView: View {
                     if let loginError {
                         Text(loginError).font(.caption).foregroundStyle(.red)
                     }
+                    if launchAtLogin, let problem = AppLocation.current.loginProblem {
+                        Label(problem, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if launchAtLogin, loginStatus == .requiresApproval {
+                        HStack(alignment: .firstTextBaseline) {
+                            Label("Bin Watch is switched off in System Settings → General → Login Items, so it won't open when you log in.",
+                                  systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                                .controlSize(.small)
+                        }
+                    }
                 }
 
                 UpdatesSettings()
@@ -144,6 +161,14 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
         }
+        // The person may change it in System Settings while Bin Watch is open.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshLoginItem() }
+        .onAppear(perform: refreshLoginItem)
+    }
+
+    private func refreshLoginItem() {
+        loginStatus = SMAppService.mainApp.status
+        if launchAtLogin != LoginItem.isOn { launchAtLogin = LoginItem.isOn }
     }
 
     private func setLaunchAtLogin(_ on: Bool) {
@@ -152,7 +177,65 @@ struct SettingsView: View {
             loginError = nil
         } catch {
             loginError = "Couldn't change this: \(error.localizedDescription)"
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+        }
+        loginStatus = SMAppService.mainApp.status
+        if launchAtLogin != LoginItem.isOn { launchAtLogin = LoginItem.isOn }
+    }
+}
+
+/// "Open Bin Watch when I log in", as macOS has it.
+enum LoginItem {
+    /// On, including when the person has switched it off in System Settings' Login Items
+    /// (macOS then says it "requires approval"): they asked for it, so the switch stays on and
+    /// Settings explains what's stopping it.
+    static var isOn: Bool {
+        let status = SMAppService.mainApp.status
+        return status == .enabled || status == .requiresApproval
+    }
+
+    /// Why it won't actually happen at the next login, or nil if it will (or it's off).
+    static var problem: String? {
+        guard isOn else { return nil }
+        if let problem = AppLocation.current.loginProblem { return problem }
+        if SMAppService.mainApp.status == .requiresApproval {
+            return "Bin Watch is switched off in System Settings → General → Login Items."
+        }
+        return nil
+    }
+}
+
+/// In the sidebar, when Bin Watch is set to open at login but can't, so it's noticed before
+/// the next restart rather than after.
+struct LoginItemSidebarCard: View {
+    @State private var problem = LoginItem.problem
+
+    var body: some View {
+        Group {
+            if problem != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("WON'T OPEN AT LOGIN")
+                        .font(.system(size: 10, weight: .semibold)).tracking(0.6)
+                        .foregroundStyle(.orange)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Text(AppLocation.current.loginProblem == nil ? "Switched off in Login Items" : "Move Bin Watch to Applications")
+                            .font(.callout.weight(.medium)).lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
+                    Button("Details…") { Navigation.shared.selection = .settings }
+                        .controlSize(.small)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .help(problem ?? "")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            problem = LoginItem.problem
+        }
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+            if problem != LoginItem.problem { problem = LoginItem.problem }
         }
     }
 }

@@ -51,10 +51,13 @@ struct Presence: Codable {
     let computer: String
     var hostName: String? = nil
     var at: Date? = nil
+    /// Which version of Bin Watch they're running (from 1.8; nil from older versions).
+    var version: String? = nil
 
-    init(_ person: Person, at: Date) {
+    init(_ person: Person, at: Date, version: String? = nil) {
         id = person.id; name = person.name; computer = person.computer; hostName = person.hostName
         self.at = at
+        self.version = version
     }
 
     var person: Person { Person(id: id, name: name, computer: computer, hostName: hostName) }
@@ -88,6 +91,8 @@ struct RequestReply: Codable, Equatable {
 final class MailboxClient {
     let folder: URL
     let me: Person
+    /// Shared in presence files so colleagues can see who's on which version.
+    var appVersion: String? = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
 
     static let requestLifetime: TimeInterval = 12 * 3600
     static let onlineWindow: TimeInterval = 3 * 60
@@ -240,7 +245,7 @@ final class MailboxClient {
     }
 
     func publishPresence(now: Date = Date()) throws {
-        try write(encoder.encode(Presence(me, at: now)), named: "\(me.id.uuidString).json", in: peopleDir)
+        try write(encoder.encode(Presence(me, at: now, version: appVersion)), named: "\(me.id.uuidString).json", in: peopleDir)
     }
 
     func post(_ request: BinRequest) throws {
@@ -299,9 +304,9 @@ final class MailboxClient {
 
     /// Everyone else who has used this mailbox, with when they were last seen. nil if the
     /// list couldn't be read. Someone who reinstalled appears once, as their newest self.
-    func listPeople(now: Date = Date()) -> [(person: Person, lastSeen: Date)]? {
+    func listPeople(now: Date = Date()) -> [(person: Person, lastSeen: Date, version: String?)]? {
         guard let files = entries(peopleDir) else { return nil }
-        var newest: [String: (person: Person, lastSeen: Date)] = [:]
+        var newest: [String: (person: Person, lastSeen: Date, version: String?)] = [:]
         for entry in files {
             guard let presence = decode(Presence.self, entry.name, in: peopleDir, modified: entry.modified),
                   presence.id != me.id else { continue }
@@ -309,12 +314,12 @@ final class MailboxClient {
             let lastSeen = min(presence.at ?? entry.modified, now)
             let key = Person.normalize(person.name) + "|" + Person.normalize(person.computer)
             if let seen = newest[key], seen.lastSeen >= lastSeen { continue }
-            newest[key] = (person, lastSeen)
+            newest[key] = (person, lastSeen, presence.version)
         }
         return Array(newest.values)
     }
 
-    func people() -> [(person: Person, lastSeen: Date)] { listPeople() ?? [] }
+    func people() -> [(person: Person, lastSeen: Date, version: String?)] { listPeople() ?? [] }
 
     struct RequestListing {
         var requests: [BinRequest] = []

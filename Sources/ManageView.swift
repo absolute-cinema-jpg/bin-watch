@@ -89,6 +89,7 @@ struct ManageView: View {
 
             VStack(spacing: 8) {
                 UpdateSidebarCard()
+                LoginItemSidebarCard()
                 MonitoredFolderCard()
             }
             .padding(12)
