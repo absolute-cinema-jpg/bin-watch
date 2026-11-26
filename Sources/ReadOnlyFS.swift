@@ -57,8 +57,6 @@ struct ScannedBin: Identifiable, Hashable {
     let isLocked: Bool
     /// Who has it open, as Avid wrote it in the lock file (usually a computer name).
     var lockedBy: String? = nil
-    /// When its lock file was written (from the folder listing; the file isn't opened).
-    var lockedSince: Date? = nil
 
     var isScript: Bool { AvidItem.isScript(relativePath) }
 }
@@ -130,12 +128,6 @@ enum ReadOnlyFS {
 
     /// As above, also noting who has each locked bin open (when that's turned on).
     static func probe(_ jobs: [ProbeJob], holders: inout [UUID: String]) -> [UUID: BinState] {
-        var lockDates: [UUID: Date] = [:]
-        return probe(jobs, holders: &holders, lockDates: &lockDates)
-    }
-
-    /// As above, also noting when each lock file was written.
-    static func probe(_ jobs: [ProbeJob], holders: inout [UUID: String], lockDates: inout [UUID: Date]) -> [UUID: BinState] {
         let start = DispatchTime.now()
         defer { if !jobs.isEmpty { fsLog.debug("probe \(jobs.count) bins took \(elapsedMS(since: start))ms") } }
         var listings: [URL: [String: String]?] = [:]
@@ -153,10 +145,8 @@ enum ReadOnlyFS {
                 results[job.id] = .missing
             } else if let lock = lockKey(for: job.binFileName, in: names) {
                 results[job.id] = .locked
-                if let name = real[lock] {
-                    let info = LockHolders.info(of: job.directory.appendingPathComponent(name))
-                    if let holder = info.holder { holders[job.id] = holder }
-                    if let modified = info.modified { lockDates[job.id] = modified }
+                if let name = real[lock], let holder = LockHolders.holder(of: job.directory.appendingPathComponent(name)) {
+                    holders[job.id] = holder
                 }
             } else {
                 results[job.id] = .available
@@ -191,10 +181,9 @@ enum ReadOnlyFS {
                 listing.folders.append(FolderItem(name: name, relativePath: rel, isProject: isProject))
             } else if AvidItem.isItem(name) {
                 let lock = lockKey(for: name, in: names).flatMap { byKey[$0] }
-                let info = lock.map(LockHolders.info)
                 listing.bins.append(ScannedBin(relativePath: rel, name: (name as NSString).deletingPathExtension,
                                                folder: relative, isLocked: lock != nil,
-                                               lockedBy: info?.holder, lockedSince: info?.modified))
+                                               lockedBy: lock.flatMap { LockHolders.holder(of: $0) }))
             }
         }
         listing.folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -290,17 +279,12 @@ enum LockHolders {
     /// How many lock files have actually been read (tests check the caching).
     private(set) static var reads = 0
 
-    static func holder(of lockFile: URL) -> String? { info(of: lockFile).holder }
-
-    /// Who holds a lock (if reading names is on) and when the lock file was written. The date
-    /// comes from the file's details, so it's known even when names are off.
-    static func info(of lockFile: URL) -> (holder: String?, modified: Date?) {
-        let date = try? lockFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        guard enabled else { return (nil, date) }
-        let modified = date ?? .distantPast
+    static func holder(of lockFile: URL) -> String? {
+        guard enabled else { return nil }
+        let modified = (try? lockFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         let path = lockFile.path
         lock.lock()
-        if let hit = cache[path], hit.modified == modified { lock.unlock(); return (hit.holder, date) }
+        if let hit = cache[path], hit.modified == modified { lock.unlock(); return hit.holder }
         lock.unlock()
 
         let holder = readFirstKilobyte(path).flatMap(parse)
@@ -309,7 +293,7 @@ enum LockHolders {
         reads += 1
         if cache.count > 2000 { cache = [:] }
         lock.unlock()
-        return (holder, date)
+        return holder
     }
 
     /// Opens read-only and non-blocking, reads up to 1 KB, closes immediately.

@@ -20,31 +20,6 @@ struct LockedLabel: View {
     }
 }
 
-/// "May be left over", beside a lock that looks like it was left behind (e.g. Avid crashed).
-/// The tooltip says why. Bin Watch never removes locks itself.
-struct LeftoverLockNote: View {
-    let leftover: LeftoverLock
-    var showReason = false
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Label {
-                Text("May be left over")
-            } icon: {
-                Image(systemName: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)
-            }
-            .foregroundStyle(.secondary)
-            if showReason {
-                Text(leftover.reason).font(.caption).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .lineLimit(showReason ? nil : 1)
-        .help(leftover.explanation)
-    }
-}
-
 private let requestPurple = Color(red: 0.55, green: 0.42, blue: 0.98)
 
 /// "Ask for this bin": choose who to ask (or everyone) and add an optional note.

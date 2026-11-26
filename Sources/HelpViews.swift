@@ -39,7 +39,7 @@ enum Diagnostics {
 
         let s = store.settings
         let onOff = { (b: Bool) in b ? "on" : "off" }
-        lines.append("Settings: check every \(Int(s.pollInterval))s · lock names \(onOff(s.showLockHolders)) · repeat chime \(onOff(s.repeatChime)) · stop after alert \(onOff(s.stopWatchingAfterAlert)) · menu bar icon \(onOff(s.showMenuBarIcon)) · open at login \(LoginItem.isOn ? (LoginItem.problem == nil ? "on" : "on, but won't work") : "off") · update checks \(onOff(s.checkForUpdates)) · flag locks after \(s.leftoverLockDays == 0 ? "never" : "\(s.leftoverLockDays) days")")
+        lines.append("Settings: check every \(Int(s.pollInterval))s · lock names \(onOff(s.showLockHolders)) · repeat chime \(onOff(s.repeatChime)) · stop after alert \(onOff(s.stopWatchingAfterAlert)) · menu bar icon \(onOff(s.showMenuBarIcon)) · open at login \(LoginItem.isOn ? (LoginItem.problem == nil ? "on" : "on, but won't work") : "off") · update checks \(onOff(s.checkForUpdates))")
         lines.append("Updates: \(BugReport.redact(updater.statusText))")
 
         return lines

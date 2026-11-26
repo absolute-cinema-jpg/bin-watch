@@ -351,43 +351,6 @@ func check(_ cond: Bool, _ msg: String) {
         check(!AppLocation.otherVolume(name: "Media 4", network: false).summary.contains("Media"),
               "bug reports say the kind of drive, not its name")
 
-        print("Locks that may be left over")
-        let now = Date()
-        let days = { (n: Double) in now.addingTimeInterval(-n * 86_400) }
-        var facts = LeftoverLock.Facts(lockedSince: days(2), now: now, oldAfterDays: 7)
-        check(LeftoverLock.check(facts) == nil, "a colleague's lock from 2 days ago looks genuine")
-        facts.lockedSince = days(9.5)
-        check(LeftoverLock.check(facts) == .old(days: 9), "…9 days is flagged as old")
-        facts.oldAfterDays = 0
-        check(LeftoverLock.check(facts) == nil, "…unless flagging by age is set to Never")
-        facts.lockedSince = days(1)
-        facts.deniedBy = "Sam"
-        check(LeftoverLock.check(facts) == .notOpenThere(name: "Sam"), "the holder saying they don't have it open beats everything")
-
-        var mine = LeftoverLock.Facts(lockedSince: days(0.5), holderIsMe: true, avidStarted: nil, now: now)
-        check(LeftoverLock.check(mine) == .avidNotRunning, "your own lock with Avid not running is left over")
-        mine.avidStarted = days(1)
-        check(LeftoverLock.check(mine) == nil, "your own lock from this Avid session is genuine")
-        mine.avidStarted = days(40)
-        mine.lockedSince = days(30)
-        check(LeftoverLock.check(mine) == nil, "…however old, if Avid's been running since before it")
-        mine.avidStarted = days(0.25)
-        mine.lockedSince = days(0.5)
-        check(LeftoverLock.check(mine) == .beforeAvidStarted, "your own lock from before Avid last started is left over")
-        mine.lockedSince = now.addingTimeInterval(-0.25 * 86_400 - 120)
-        check(LeftoverLock.check(mine) == nil, "…but a couple of minutes either side is just the storage's clock")
-
-        var away = LeftoverLock.Facts(lockedSince: days(5), ownerName: "Jo", ownerLastSeen: days(4), now: now, oldAfterDays: 0)
-        check(LeftoverLock.check(away) == .ownerAway(name: "Jo", days: 4), "locked before Jo's Bin Watch went off 4 days ago")
-        away.lockedSince = days(1)
-        check(LeftoverLock.check(away) == nil, "…but locked since then means Jo is working without Bin Watch")
-        away.lockedSince = days(5)
-        away.ownerLastSeen = days(1)
-        check(LeftoverLock.check(away) == nil, "…and Jo seen yesterday is too recent to say")
-        check(LeftoverLock.old(days: 9).reason == "Locked for 9 days"
-              && LeftoverLock.avidNotRunning.explanation.contains("never removes locks"),
-              "the reason and tooltip say why, and that Bin Watch doesn't remove locks")
-
         try UpdateTests.run(dir: URL(fileURLWithPath: CommandLine.arguments[1]))
 
         try? fm.removeItem(at: root)

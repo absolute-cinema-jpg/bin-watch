@@ -51,8 +51,6 @@ struct AppSettings: Codable, Equatable {
     var browseMode = BrowseMode.list
     var showLockHolders = true
     var checkForUpdates = true
-    /// Point out locks older than this many days as possibly left over. 0 = only for other reasons.
-    var leftoverLockDays = 7
 
     init() {}
 
@@ -70,7 +68,6 @@ struct AppSettings: Codable, Equatable {
         browseMode = try c.decodeIfPresent(BrowseMode.self, forKey: .browseMode) ?? d.browseMode
         showLockHolders = try c.decodeIfPresent(Bool.self, forKey: .showLockHolders) ?? d.showLockHolders
         checkForUpdates = try c.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? d.checkForUpdates
-        leftoverLockDays = try c.decodeIfPresent(Int.self, forKey: .leftoverLockDays) ?? d.leftoverLockDays
         // Version 2: "Got it" also stops watching, by default.
         if savedVersion < 2 { stopWatchingAfterAlert = true }
         version = AppSettings.currentVersion

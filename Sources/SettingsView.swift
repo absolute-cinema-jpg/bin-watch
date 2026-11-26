@@ -118,19 +118,6 @@ struct SettingsView: View {
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Picker("Flag locks older than", selection: $store.settings.leftoverLockDays) {
-                            Text("2 days").tag(2)
-                            Text("3 days").tag(3)
-                            Text("1 week").tag(7)
-                            Text("2 weeks").tag(14)
-                            Text("4 weeks").tag(28)
-                            Text("Never").tag(0)
-                        }
-                        Text("Marks them “May be left over”, e.g. after Avid crashed. Also marked: locks by this Mac when Avid isn't running, and ones whose owner says they don't have it open. Bin Watch never removes locks.")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                     Toggle("Open Bin Watch when I log in", isOn: $launchAtLogin)
                         .onChange(of: launchAtLogin) { setLaunchAtLogin($0) }
                     if let loginError {
