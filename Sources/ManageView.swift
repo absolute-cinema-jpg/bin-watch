@@ -240,7 +240,7 @@ struct WatchedRow: View {
             Spacer()
             if let request = requests.openRequest(for: bin.relativePath) {
                 RequestStatusChip(request: request)
-            } else if state == .locked {
+            } else if state == .locked && !requests.isMine(holder: store.holders[bin.id]) {
                 AskButton(relativePath: bin.relativePath, name: bin.name, holder: store.holders[bin.id])
             }
             StatePill(state: state)

@@ -100,6 +100,11 @@ final class RequestCenter: ObservableObject {
     }
 
     /// "you", a colleague's Bin Watch name, or the name exactly as Avid wrote it.
+    /// Avid's lock file names this Mac (or you): you have it open yourself.
+    func isMine(holder: String?) -> Bool {
+        holder.map { me.matches(lockHolder: $0) } ?? false
+    }
+
     func describe(holder: String) -> String {
         if me.matches(lockHolder: holder) { return "you" }
         return person(holding: holder)?.person.name ?? holder

@@ -302,11 +302,13 @@ struct BrowseView: View {
     private func statusText(_ listing: FolderListing?) -> String {
         let selected = browser.selectedBins
         if !selected.isEmpty {
-            let allWatched = selected.allSatisfy { store.isWatched($0.relativePath) }
+            let watchable = selected.filter(store.canToggleWatch)
+            let allWatched = watchable.allSatisfy { store.isWatched($0.relativePath) }
             let what = selected.count == 1 ? "“\(selected[0].name)” selected" : "\(AvidItem.count(selected.map(\.relativePath))) selected"
             let open = selected.count == 1
                 ? "double-click or ⌘O to \(BinOpener.runningAvid != nil ? "open in Avid" : "show in Finder")"
                 : "⌘O to show them in Finder"
+            if watchable.isEmpty { return "\(what) — you have \(selected.count == 1 ? "it" : "them") open · \(open)" }
             return "\(what) — Return to \(allWatched ? "stop watching" : "watch") · \(open)"
         }
         if let results = searchResults {
@@ -618,7 +620,9 @@ struct BinRow: View {
                 LockedLabel(holder: bin.lockedBy)
                     .font(.caption).foregroundStyle(.orange)
                     .frame(maxWidth: 220, alignment: .trailing)
-                AskButton(relativePath: bin.relativePath, name: bin.name, holder: bin.lockedBy, compact: true)
+                if !store.lockedByMe(bin) {
+                    AskButton(relativePath: bin.relativePath, name: bin.name, holder: bin.lockedBy, compact: true)
+                }
             }
             WatchToggle(bin: bin)
         }
@@ -643,7 +647,10 @@ struct WatchToggle: View {
         .buttonStyle(.bordered)
         .controlSize(compact ? .small : .regular)
         .tint(watching ? Color.accentColor : nil)
-        .help(watching ? "Stop watching" : "Alert me when this \(AvidItem.noun(bin.relativePath)) is unlocked")
+        .disabled(!store.canToggleWatch(bin))
+        .help(watching ? "Stop watching"
+              : store.lockedByMe(bin) ? "You have this \(AvidItem.noun(bin.relativePath)) open, so there's nothing to wait for"
+              : "Alert me when this \(AvidItem.noun(bin.relativePath)) is unlocked")
     }
 }
 
@@ -786,10 +793,11 @@ struct BinContextMenu: View {
     var body: some View {
         let watching = store.isWatched(bin.relativePath)
         Button(watching ? "Stop Watching" : "Watch") { store.toggleWatch(bin) }
+            .disabled(!store.canToggleWatch(bin))
         Button(BinOpener.showLabel) {
             if let root = store.root { BinOpener.show([root.appendingPathComponent(bin.relativePath)]) }
         }
-        if bin.isLocked {
+        if bin.isLocked && !store.lockedByMe(bin) {
             Button(bin.isScript ? "Ask for This Script…" : "Ask for This Bin…") { Navigation.shared.ask(relativePath: bin.relativePath, name: bin.name, holder: bin.lockedBy) }
         }
     }
@@ -1021,7 +1029,12 @@ private struct BinPreview: View {
                 LockedLabel(holder: holder).font(.callout).foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
             }
-            if state == .locked {
+            if state == .locked && store.lockedByMe(bin) && watched == nil {
+                Text("You have this \(AvidItem.noun(bin.relativePath)) open in Avid, so there's nothing to wait for.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if state == .locked {
                 if let request = requests.openRequest(for: bin.relativePath) {
                     RequestStatusChip(request: request)
                 } else {
@@ -1042,6 +1055,7 @@ private struct BinPreview: View {
                     Label(bin.isScript ? "Watch This Script" : "Watch This Bin", systemImage: "bell.fill").frame(minWidth: 130)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!store.canToggleWatch(bin))
                 .controlSize(.large)
             }
             Spacer()
@@ -1058,8 +1072,10 @@ private struct MultiBinPreview: View {
     @EnvironmentObject var store: AppStore
 
     var body: some View {
-        let allWatched = bins.allSatisfy { store.isWatched($0.relativePath) }
+        let watchable = bins.filter(store.canToggleWatch)
+        let allWatched = !watchable.isEmpty && watchable.allSatisfy { store.isWatched($0.relativePath) }
         let locked = bins.filter(\.isLocked).count
+        let mine = bins.filter(store.lockedByMe).count
         VStack(spacing: 12) {
             Spacer()
             ZStack {
@@ -1076,7 +1092,7 @@ private struct MultiBinPreview: View {
             .frame(height: 90)
             Text("\(AvidItem.count(bins.map(\.relativePath))) selected").font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
-            Text(locked == 0 ? "None are locked" : "\(locked) locked")
+            Text(locked == 0 ? "None are locked" : mine == 0 ? "\(locked) locked" : "\(locked) locked, \(mine) by you")
                 .font(.caption).foregroundStyle(.secondary)
             Button { store.toggleWatch(bins) } label: {
                 Label(allWatched ? "Stop Watching All" : "Watch All", systemImage: allWatched ? "bell.slash" : "bell.fill")
@@ -1085,7 +1101,11 @@ private struct MultiBinPreview: View {
             .buttonStyle(.borderedProminent)
             .tint(allWatched ? .gray : .accentColor)
             .controlSize(.large)
-            Text("or press Return").font(.caption2).foregroundStyle(.tertiary)
+            .disabled(watchable.isEmpty)
+            .help(watchable.isEmpty ? "You have all of these open" : "")
+            if !watchable.isEmpty {
+                Text("or press Return").font(.caption2).foregroundStyle(.tertiary)
+            }
             Spacer()
         }
         .padding(20)

@@ -45,6 +45,32 @@ enum LockedFlowTests {
         Navigation.shared.selection = .browse
         pump(0.5)
         for bin in store.watched { store.unwatch(bin) }
+
+        // A bin open on this Mac: nothing to wait for, and no one to ask.
+        print("Bins you have open yourself")
+        try! Data(ProcessInfo.processInfo.hostName.utf8).write(to: project.appendingPathComponent("Music.lck"))
+        scanner.refresh()
+        pump(1.5)
+        if let music = scanner.items.first(where: { $0.name == "Music" }),
+           let reel = scanner.items.first(where: { $0.name == "Reel 2" }) {
+            check(store.lockedByMe(music) && !store.lockedByMe(reel), "a bin whose lock file names this Mac counts as yours; EDIT-2's doesn't")
+            store.toggleWatch(music)
+            check(!store.isWatched(music.relativePath), "your own bin can't be watched")
+            store.toggleWatch([music, reel])
+            check(store.isWatched(reel.relativePath) && !store.isWatched(music.relativePath),
+                  "watching a selection skips the ones you have open")
+            store.toggleWatch([music, reel])
+            check(store.watched.isEmpty, "…and pressing Return again stops watching the rest")
+            Navigation.shared.reveal(folder: music.folder, select: music.relativePath)
+            pump(1.5)
+            if let path = ProcessInfo.processInfo.environment["SNAP_DIR"] { snapshot(path + "/own-lock.png") }
+            Navigation.shared.reveal(folder: reel.folder, select: reel.relativePath)
+            pump(1.5)
+            if let path = ProcessInfo.processInfo.environment["SNAP_DIR"] { snapshot(path + "/own-lock-folder.png") }
+        } else {
+            check(false, "Music and Reel 2 show as locked: \(scanner.items.map(\.name))")
+        }
+
         try! Data().write(to: project.appendingPathComponent("3 Cuts/Reel 2.lck"))
         try! fm.removeItem(at: project.appendingPathComponent("Music.lck"))
     }

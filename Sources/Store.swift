@@ -154,10 +154,22 @@ final class AppStore: ObservableObject {
         watchedBin(at: relativePath) != nil
     }
 
+    /// A bin you have open yourself (its lock file names this Mac): there's nothing to wait
+    /// for and no one to ask, so it can't be watched or asked for.
+    func lockedByMe(_ bin: ScannedBin) -> Bool {
+        bin.isLocked && RequestCenter.shared.isMine(holder: bin.lockedBy)
+    }
+
+    /// Already watched (so it can be stopped), or not one of your own.
+    func canToggleWatch(_ bin: ScannedBin) -> Bool {
+        isWatched(bin.relativePath) || !lockedByMe(bin)
+    }
+
     func toggleWatch(_ bin: ScannedBin) {
         if let existing = watchedBin(at: bin.relativePath) {
             unwatch(existing)
         } else {
+            guard !lockedByMe(bin) else { return }
             let new = WatchedBin(relativePath: bin.relativePath)
             watched.append(new)
             detector.seed(new.id, locked: bin.isLocked)
@@ -179,6 +191,7 @@ final class AppStore: ObservableObject {
     /// Return key on a selection: if every selected bin is already watched, stop watching
     /// them all; otherwise watch them all.
     func toggleWatch(_ bins: [ScannedBin]) {
+        let bins = bins.filter(canToggleWatch)
         guard !bins.isEmpty else { return }
         if bins.allSatisfy({ isWatched($0.relativePath) }) {
             for bin in bins { if let w = watchedBin(at: bin.relativePath) { unwatch(w) } }
