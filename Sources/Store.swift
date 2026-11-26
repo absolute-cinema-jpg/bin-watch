@@ -24,6 +24,8 @@ final class AppStore: ObservableObject {
     @Published private(set) var states: [UUID: BinState] = [:]
     /// Who has each locked watched bin open (as Avid wrote it in the lock file).
     @Published private(set) var holders: [UUID: String] = [:]
+    /// When each watched bin's lock file was written (for spotting leftover locks).
+    @Published private(set) var lockDates: [UUID: Date] = [:]
     @Published private(set) var pendingAlerts: Set<UUID> = []
     @Published private(set) var customSounds: [String] = SoundLibrary.customSounds()
 
@@ -154,10 +156,22 @@ final class AppStore: ObservableObject {
         watchedBin(at: relativePath) != nil
     }
 
+    /// A bin you have open yourself (its lock file names this Mac): there's nothing to wait
+    /// for and no one to ask, so it can't be watched or asked for.
+    func lockedByMe(_ bin: ScannedBin) -> Bool {
+        bin.isLocked && RequestCenter.shared.isMine(holder: bin.lockedBy)
+    }
+
+    /// Already watched (so it can be stopped), or not one of your own.
+    func canToggleWatch(_ bin: ScannedBin) -> Bool {
+        isWatched(bin.relativePath) || !lockedByMe(bin)
+    }
+
     func toggleWatch(_ bin: ScannedBin) {
         if let existing = watchedBin(at: bin.relativePath) {
             unwatch(existing)
         } else {
+            guard !lockedByMe(bin) else { return }
             let new = WatchedBin(relativePath: bin.relativePath)
             watched.append(new)
             detector.seed(new.id, locked: bin.isLocked)
@@ -179,6 +193,7 @@ final class AppStore: ObservableObject {
     /// Return key on a selection: if every selected bin is already watched, stop watching
     /// them all; otherwise watch them all.
     func toggleWatch(_ bins: [ScannedBin]) {
+        let bins = bins.filter(canToggleWatch)
         guard !bins.isEmpty else { return }
         if bins.allSatisfy({ isWatched($0.relativePath) }) {
             for bin in bins { if let w = watchedBin(at: bin.relativePath) { unwatch(w) } }
@@ -187,11 +202,36 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// Why a lock may be left over (see LeftoverLock), or nil if it looks genuine.
+    func leftoverLock(binPath: String, holder: String?, since: Date?, now: Date = Date()) -> LeftoverLock? {
+        let requests = RequestCenter.shared
+        var facts = LeftoverLock.Facts(lockedSince: since, now: now, oldAfterDays: settings.leftoverLockDays)
+        if let holder {
+            facts.holderIsMe = requests.me.matches(lockHolder: holder)
+            if facts.holderIsMe, let avid = BinOpener.runningAvid {
+                facts.avidStarted = avid.launchDate ?? .distantPast
+            }
+            // A reply from the person whose Mac it names, to a request made since it was locked.
+            let asked = requests.outgoing.filter { request in
+                request.binPath == binPath
+                    && (since.map { request.created >= $0.addingTimeInterval(-LeftoverLock.clockMargin) } ?? true)
+            }
+            facts.deniedBy = asked.lazy.flatMap { requests.replies[$0.id] ?? [] }
+                .first { $0.answer == .notMe && $0.from.matches(lockHolder: holder) }?.from.name
+            if let owner = requests.person(holding: holder) {
+                facts.ownerName = owner.person.name
+                facts.ownerLastSeen = owner.lastSeen
+            }
+        }
+        return LeftoverLock.check(facts)
+    }
+
     func unwatch(_ bin: WatchedBin) {
         RequestCenter.shared.cancelRequest(for: bin.relativePath)
         watched.removeAll { $0.id == bin.id }
         states[bin.id] = nil
         holders[bin.id] = nil
+        lockDates[bin.id] = nil
         detector.forget(bin.id)
         pendingAlerts.remove(bin.id)
         AlertCenter.shared.remove(bin.id)
@@ -231,11 +271,13 @@ final class AppStore: ObservableObject {
         probing = true
         queue.async { [weak self] in
             var holders: [UUID: String] = [:]
-            let results = ReadOnlyFS.probe(jobs, holders: &holders)
+            var lockDates: [UUID: Date] = [:]
+            let results = ReadOnlyFS.probe(jobs, holders: &holders, lockDates: &lockDates)
             let online = root.map(ReadOnlyFS.isReachable)
             DispatchQueue.main.async {
                 self?.apply(results, unresolved: unresolved, online: online)
                 if self?.holders != holders { self?.holders = holders }
+                if self?.lockDates != lockDates { self?.lockDates = lockDates }
                 self?.probing = false
             }
         }

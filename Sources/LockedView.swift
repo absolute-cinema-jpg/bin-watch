@@ -269,6 +269,9 @@ private struct LockedRow: View {
                     .lineLimit(1).truncationMode(.middle)
             }
             Spacer()
+            if let leftover = store.leftoverLock(binPath: bin.relativePath, holder: bin.lockedBy, since: bin.lockedSince) {
+                LeftoverLockNote(leftover: leftover).font(.caption)
+            }
             if owner.kind != .me {
                 if let request = requests.openRequest(for: bin.relativePath) {
                     RequestStatusChip(request: request)
