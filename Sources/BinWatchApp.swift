@@ -26,14 +26,10 @@ struct BinWatchApp: App {
                     Updater.shared.check()
                 }
             }
-            CommandGroup(replacing: .help) {
-                Button("Report a Bug…") {
-                    ManageWindow.show()
-                    Navigation.shared.showBugReport = true
-                }
-                Button("Known Issues") { LinkOpener.open(BugReport.issuesPage) }
-                Button("Bin Watch on GitHub") { LinkOpener.open(URL(string: "https://github.com/\(UpdateLogic.repo)")!) }
-            }
+            BugReportCommands(report: {
+                ManageWindow.show()
+                Navigation.shared.showBugReport = true
+            })
         }
     }
 }
@@ -52,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = RequestCenter.shared
         _ = NewBinWatcher.shared
         Updater.shared.start()
+        Diagnostics.install()
         ManageWindow.show()
         if CommandLine.arguments.contains("--test-alert") {
             AppStore.shared.showTestAlert(count: 3)

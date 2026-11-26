@@ -143,7 +143,7 @@ struct SettingsView: View {
 
                 UpdatesSettings()
 
-                HelpSettings()
+                BugReportSection(report: { Navigation.shared.showBugReport = true })
 
                 Section {
                     HStack(alignment: .top, spacing: 12) {

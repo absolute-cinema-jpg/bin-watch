@@ -1,6 +1,6 @@
 import Foundation
 
-/// Updates (version checks, GitHub's answer, the installer) and bug report links.
+/// Updates (version checks, GitHub's answer, the installer) and redacting Bin Watch's log lines for feedback.
 enum UpdateTests {
     static func run(dir: URL) throws {
         print("Updates — versions")
@@ -65,32 +65,7 @@ enum UpdateTests {
               && UpdateLogic.feedURL(override: nil) == UpdateLogic.latestReleaseAPI,
               "only a test server on this Mac can replace GitHub as the update source")
 
-        print("Bug reports")
-        var report = BugReport()
-        check(!report.isReady, "an empty report can't be sent")
-        report.title = "Alerts & sounds + more = broken 🐞"
-        report.whatHappened = "No alert came.\nTried twice?"
-        report.details = "Bin Watch 1.7 (build 8)\nmacOS 13.7.2 · Apple Silicon"
-        check(report.isReady, "a summary and what happened are enough")
-        let link = report.issueLink
-        let items = URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        let value = { (name: String) in items.first { $0.name == name }?.value }
-        check(link.absoluteString.hasPrefix("https://github.com/\(UpdateLogic.repo)/issues/new?"), "it opens GitHub's new-issue page")
-        check(value("title") == report.title && value("labels") == "bug", "the title survives &, +, = and emoji: \(value("title") ?? "nil")")
-        check(value("body")?.contains("### What happened\n\nNo alert came.\nTried twice?") == true
-              && value("body")?.contains("<summary>Technical details</summary>") == true
-              && value("body")?.contains("Steps to reproduce") == false, "the body has the description and details, and skips empty parts")
-        report.details = "Bin Watch 1.7\nmacOS 13\n\n" + BugReport.eventsHeading + "\n"
-            + (1...400).map { "12:00:\($0) [mailbox] mailbox status: connected, event number \($0)" }.joined(separator: "\n")
-        let long = report.issueLink
-        let longBody = URLComponents(url: long, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "body" }?.value ?? ""
-        check(long.absoluteString.count <= BugReport.maxLinkLength && longBody.contains("Bin Watch 1.7\nmacOS 13")
-              && longBody.contains("event number 400") && !longBody.contains("event number 1\n"),
-              "long technical details are trimmed (oldest events first) to fit in a link")
-        report.details = nil
-        report.whatHappened = String(repeating: "Something went wrong again. ", count: 600)
-        check(report.issueLink.absoluteString.count <= BugReport.maxLinkLength && report.body.count > BugReport.maxLinkLength,
-              "a very long description is shortened in the link (Copy Report keeps all of it)")
+        print("Bug reports (the rest are in Tests/BugReportTests.swift)")
         let redacted = BugReport.redact("couldn't write “Reel 1.avb”: /Volumes/Project/My Show/Reel 1.avb")
         check(!redacted.contains("Reel") && !redacted.contains("Show") && !redacted.contains("Project"),
               "names and paths are taken out of log lines: \(redacted)")

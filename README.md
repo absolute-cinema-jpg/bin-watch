@@ -26,7 +26,7 @@ If you're not an administrator on your Mac, macOS may not let Bin Watch replace 
 ```bash
 ./build.sh install     # builds and copies "Bin Watch.app" into /Applications
 ./build.sh             # just builds into ./build
-./Tests/run.sh         # tests the lock detection, mailbox, update and bug report logic
+./Tests/run.sh         # tests the lock detection, mailbox, update and feedback logic
 ./Tests/run-ui.sh      # clicks through the real interface offscreen, silently
 ```
 
@@ -110,7 +110,7 @@ Requests expire after 12 hours. Each person's Bin Watch only ever writes its own
   - **The request mailbox** ([Sources/Mailbox.swift](Sources/Mailbox.swift)). It can't be your monitored folder, contain it, or sit inside an Avid project. Every write goes through one guarded function that only accepts the mailbox's own subfolders.
   - **Bin Watch's private sound library** inside its sandbox container.
   - **Bin Watch.app itself, when you click Update.** macOS won't let a sandboxed app install its own update, so a small helper inside Bin Watch.app does just that ([Sources/Updater](Sources/Updater)). It starts outside the App Sandbox, but before doing anything it locks itself into a sandbox of its own: from then on macOS refuses it any network access, and any write except to Bin Watch.app, a temporary folder beside it and its own temp folder. The tools it runs to unpack and check the update are held to the same limits. Bin Watch itself still runs in the App Sandbox.
-- **It only connects to GitHub, and only to check for and download updates.** Turn off **Check for updates automatically** in Settings and it only does that when you ask. Bug reports open in your browser; Bin Watch doesn't send them itself.
+- **It only connects to GitHub, and only to check for and download updates.** Turn off **Check for updates automatically** in Settings and it only does that when you ask. Bug reports and feature ideas open in your browser; Bin Watch doesn't send them itself.
 - **It avoids false alarms.** A bin has to look free on two checks in a row before you're alerted. A workspace dropping offline never counts as "unlocked".
 
 To check the entitlements yourself:
@@ -132,11 +132,11 @@ codesign -d --entitlements - "/Applications/Bin Watch.app"
 
 ## Feedback
 
-Found a bug? Choose **Help → Report a Bug…** in Bin Watch, or **Report a Bug…** in **Settings → Help**. Describe what happened, and Bin Watch opens GitHub's new-issue page in your browser with your report filled in, for you to check and post. You'll need a free GitHub account.
+Found a bug, or have an idea? Choose **Help → Send Feedback…** in Bin Watch, or **Send Feedback…** in **Settings → Feedback**. The switch at the top picks **Report a Bug** (what happened, and optionally how to make it happen) or **Suggest a Feature** (what you'd like Bin Watch to do, and optionally how it would help your work). Bin Watch then opens GitHub's new-issue page in your browser with it filled in, titled "Bug: …" or "Idea: …", for you to check and post. Bin Watch doesn't send anything itself, and you'll need a free GitHub account. **Open Requests** shows the bugs and ideas people have already sent. **Copy Text** copies everything, to paste into an email instead.
 
-It can add technical details: your Bin Watch and macOS versions, how Bin Watch is set up (for example whether the monitored folder is on an SMB or AFP server, and whether the mailbox is connected) and recent connection events. Click **Show What's Included** to see exactly what's added. It never includes the names of projects, bins, folders, people or computers. Reports are public, so please don't type real project or bin names either.
+It can add technical details: your Bin Watch and macOS versions, how Bin Watch is set up (for example whether the monitored folder is on an SMB or AFP server, and whether the mailbox is connected) and recent connection and update events. They're included in bug reports unless you untick them, and left out of feature ideas unless you tick them. Click **Show What's Included** to see exactly what's added. It never includes the names of projects, bins, folders, people or computers. Everything on GitHub is public, so please don't type real project or bin names either.
 
-Have an idea instead? [Open an issue](https://github.com/absolute-cinema-jpg/bin-watch/issues).
+A small GitHub Action ([.github/workflows/label-feedback.yml](.github/workflows/label-feedback.yml)) labels each new issue `bug` or `enhancement`, from a hidden line at the end of what Bin Watch fills in (or failing that, the "Bug:" or "Idea:" title). It only adds a label.
 
 ## License
 

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Updates (with GitHub replaced by a canned answer) and the bug report sheet.
+/// Updates (with GitHub replaced by a canned answer) and the Send Feedback sheet.
 enum HelpFlowTests {
     static func run(_ store: AppStore, dir: String) {
         let updater = Updater.shared
@@ -41,7 +41,7 @@ enum HelpFlowTests {
                                  styleMask: [.borderless], backing: .buffered, defer: false)
             panel.appearance = NSAppearance(named: .darkAqua)
             panel.backgroundColor = NSColor(white: 0.16, alpha: 1)
-            panel.contentView = NSHostingView(rootView: Form { UpdatesSettings(); HelpSettings() }
+            panel.contentView = NSHostingView(rootView: Form { UpdatesSettings(); BugReportSection(report: {}) }
                 .formStyle(.grouped).environmentObject(store))
             panel.orderFrontRegardless()
             pump(1)
@@ -62,9 +62,11 @@ enum HelpFlowTests {
         pump(0.5)
         check(updater.phase == .upToDate && updater.update == nil, "nothing newer: up to date")
 
-        print("Bug reports")
-        let details = Diagnostics.collect()
-        check(details.contains("Bin Watch ") && details.contains("macOS ") && details.contains("Monitored folder: chosen"),
+        print("Feedback")
+        Diagnostics.install()
+        let details = BugReportDiagnostics.collect()
+        check(details.contains("Bin Watch ") && details.contains("macOS ") && details.contains("Monitored folder: chosen")
+              && details.contains("Running from: "),
               "technical details say which version and how it's set up")
         let secrets = ["Documentary", "Avid Projects", "Reel", dir, "Sam", "Edit 2", "EDIT-2", ProcessInfo.processInfo.hostName,
                        RequestCenter.shared.myName].filter { !$0.isEmpty }
@@ -72,17 +74,27 @@ enum HelpFlowTests {
         check(leaked.isEmpty, "…but never names of projects, bins, folders, people or computers: \(leaked)")
 
         var opened: [URL] = []
-        LinkOpener.testHook = { opened.append($0) }
+        BugReportLinks.testHook = { opened.append($0) }
         Navigation.shared.showBugReport = true
         pump(1.5)
         let sheet = window.attachedSheet
-        check(sheet != nil, "Report a Bug opens a sheet")
+        check(sheet != nil, "Send Feedback opens a sheet")
         if let snaps, let sheet { snapshot(snaps + "/bug-report.png", of: sheet) }
         Navigation.shared.showBugReport = false
         pump(1)
         check(window.attachedSheet == nil && opened.isEmpty, "cancelling sends nothing")
 
-        LinkOpener.testHook = nil
+        BugReportSheet.startKind = .feature
+        Navigation.shared.showBugReport = true
+        pump(1.5)
+        check(window.attachedSheet != nil, "Send Feedback can open on Suggest a Feature")
+        if let snaps, let sheet = window.attachedSheet { snapshot(snaps + "/feature-request.png", of: sheet) }
+        Navigation.shared.showBugReport = false
+        pump(1)
+        BugReportSheet.startKind = .bug
+        check(window.attachedSheet == nil && opened.isEmpty, "…and cancelling that sends nothing either")
+
+        BugReportLinks.testHook = nil
         updater.installHook = nil
         updater.fetchRelease = nil
         Navigation.shared.selection = .browse
