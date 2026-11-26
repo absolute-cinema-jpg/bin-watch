@@ -615,6 +615,9 @@ struct BinRow: View {
             }
             Spacer()
             if bin.isLocked {
+                if let leftover = store.leftoverLock(binPath: bin.relativePath, holder: bin.lockedBy, since: bin.lockedSince) {
+                    LeftoverLockNote(leftover: leftover).font(.caption)
+                }
                 LockedLabel(holder: bin.lockedBy)
                     .font(.caption).foregroundStyle(.orange)
                     .frame(maxWidth: 220, alignment: .trailing)
@@ -1020,6 +1023,11 @@ private struct BinPreview: View {
             if state == .locked, let holder = bin.lockedBy ?? watched.flatMap({ store.holders[$0.id] }) {
                 LockedLabel(holder: holder).font(.callout).foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
+            }
+            if state == .locked, let leftover = store.leftoverLock(
+                binPath: bin.relativePath, holder: bin.lockedBy ?? watched.flatMap({ store.holders[$0.id] }),
+                since: bin.lockedSince ?? watched.flatMap({ store.lockDates[$0.id] })) {
+                LeftoverLockNote(leftover: leftover, showReason: true).font(.callout)
             }
             if state == .locked {
                 if let request = requests.openRequest(for: bin.relativePath) {
