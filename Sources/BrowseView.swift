@@ -617,6 +617,9 @@ struct BinRow: View {
             }
             Spacer()
             if bin.isLocked {
+                if let leftover = store.leftoverLock(binPath: bin.relativePath, holder: bin.lockedBy, since: bin.lockedSince) {
+                    LeftoverLockNote(leftover: leftover).font(.caption)
+                }
                 LockedLabel(holder: bin.lockedBy)
                     .font(.caption).foregroundStyle(.orange)
                     .frame(maxWidth: 220, alignment: .trailing)
@@ -1029,9 +1032,16 @@ private struct BinPreview: View {
                 LockedLabel(holder: holder).font(.callout).foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
             }
+            let leftover = state != .locked ? nil : store.leftoverLock(
+                binPath: bin.relativePath, holder: bin.lockedBy ?? watched.flatMap({ store.holders[$0.id] }),
+                since: bin.lockedSince ?? watched.flatMap({ store.lockDates[$0.id] }))
+            if let leftover {
+                LeftoverLockNote(leftover: leftover, showReason: true).font(.callout)
+            }
             if state == .locked && store.lockedByMe(bin) {
-                // No one to ask. (Watched from before? It can still be stopped below.)
-                if watched == nil {
+                // No one to ask. A leftover lock of yours is explained above; otherwise it's
+                // simply open here. (Watched from before? It can still be stopped below.)
+                if watched == nil && leftover == nil {
                     Text("You have this \(AvidItem.noun(bin.relativePath)) open in Avid, so there's nothing to wait for.")
                         .font(.caption).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

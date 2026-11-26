@@ -236,6 +236,10 @@ struct WatchedRow: View {
                 if state == .locked, let holder = store.holders[bin.id] {
                     LockedLabel(holder: holder).font(.caption).foregroundStyle(.orange)
                 }
+                if state == .locked, let leftover = store.leftoverLock(binPath: bin.relativePath, holder: store.holders[bin.id],
+                                                                       since: store.lockDates[bin.id]) {
+                    LeftoverLockNote(leftover: leftover).font(.caption)
+                }
             }
             Spacer()
             if let request = requests.openRequest(for: bin.relativePath) {
