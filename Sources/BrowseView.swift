@@ -1029,11 +1029,14 @@ private struct BinPreview: View {
                 LockedLabel(holder: holder).font(.callout).foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
             }
-            if state == .locked && store.lockedByMe(bin) && watched == nil {
-                Text("You have this \(AvidItem.noun(bin.relativePath)) open in Avid, so there's nothing to wait for.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+            if state == .locked && store.lockedByMe(bin) {
+                // No one to ask. (Watched from before? It can still be stopped below.)
+                if watched == nil {
+                    Text("You have this \(AvidItem.noun(bin.relativePath)) open in Avid, so there's nothing to wait for.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else if state == .locked {
                 if let request = requests.openRequest(for: bin.relativePath) {
                     RequestStatusChip(request: request)
